@@ -1,30 +1,42 @@
 cmake_minimum_required(VERSION 3.10)
 project(ign_gnb_heatmap)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Use ignition-cmake helpers if available
-find_package(ignition-cmake2 QUIET)
-if(ignition-cmake2_FOUND)
-ign_find_package(ignition-rendering6 REQUIRED)
-ign_find_package(ignition-transport11 REQUIRED)
-else()
-find_package(ignition-rendering6 REQUIRED)
+# Find Ignition packages
+find_package(ignition-gazebo6 REQUIRED)
+find_package(ignition-plugin1 REQUIRED COMPONENTS register)
 find_package(ignition-transport11 REQUIRED)
-endif()
+find_package(ignition-msgs8 REQUIRED)
+find_package(ignition-math6 REQUIRED)
+find_package(ignition-common4 REQUIRED)
 
+# Create the plugin shared library
+add_library(HeatmapPlugin SHARED
+    src/HeatmapPlugin.cc
+)
 
-add_library(HeatmapRenderPlugin SHARED
-src/HeatmapRenderPlugin.cc)
+target_include_directories(HeatmapPlugin PRIVATE
+    include
+    ${IGNITION-GAZEBO_INCLUDE_DIRS}
+)
 
+target_link_libraries(HeatmapPlugin
+    ignition-gazebo6::ignition-gazebo6
+    ignition-plugin1::ignition-plugin1-register
+    ignition-transport11::ignition-transport11
+    ignition-msgs8::ignition-msgs8
+    ignition-math6::ignition-math6
+    ignition-common4::ignition-common4
+)
 
-target_include_directories(HeatmapRenderPlugin PRIVATE include)
+# Install the plugin
+install(TARGETS HeatmapPlugin
+    LIBRARY DESTINATION lib
+)
 
-
-target_link_libraries(HeatmapRenderPlugin
-ignition-rendering6::ignition-rendering6
-ignition-transport11::ignition-transport11)
-
-
-# Install plugin into a plugins folder so ign gazebo can find it
-install(TARGETS HeatmapRenderPlugin
-LIBRARY DESTINATION lib)
+# Install world files
+install(DIRECTORY worlds/
+    DESTINATION share/${PROJECT_NAME}/worlds
+)
