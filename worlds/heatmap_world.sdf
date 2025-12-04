@@ -1,0 +1,27 @@
+---
+
+
+## worlds/heatmap_world.sdf
+
+
+```xml
+<?xml version="1.0" ?>
+<sdf version="1.8">
+<world name="heatmap_world">
+<include>
+<uri>model://sun</uri>
+</include>
+
+
+<plugin name="gnb_heatmap" filename="libHeatmapRenderPlugin.so">
+<grid_w>128</grid_w>
+<grid_h>128</grid_h>
+<frequency_hz>3500000000</frequency_hz>
+<tx_dbm>30.0</tx_dbm>
+<gnb_pose>0 0 1.5 0 0 0</gnb_pose>
+<block_loss_db>30.0</block_loss_db>
+</plugin>
+
+
+</world>
+</sdf>
