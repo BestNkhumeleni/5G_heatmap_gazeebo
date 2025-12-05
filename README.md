@@ -17,4 +17,9 @@ A starter rendering plugin for Ignition Gazebo 6 that computes a 2D ground-plane
 mkdir build && cd build
 cmake ..
 make -j
+
+## how to run
+ign gazebo worlds/heatmap_world.sdf --gui-config gui.config
+
 # optionally: sudo make install (or copy .so to ~/.ignition/gazebo/plugins or a GAZEBO_PLUGIN_PATH)
+

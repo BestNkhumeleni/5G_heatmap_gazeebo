@@ -3,6 +3,7 @@
 #include <ignition/gazebo/System.hh>
 #include <ignition/transport/Node.hh>
 #include <ignition/math/Vector3.hh>
+#include <ignition/math/AxisAlignedBox.hh>
 #include <vector>
 #include <thread>
 #include <atomic>
@@ -11,8 +12,18 @@
 namespace heatmap_plugin
 {
 
+/// Represents an obstacle (building) for RF occlusion calculations
+struct Obstacle
+{
+    ignition::math::Vector3d position;
+    ignition::math::Vector3d size;
+    ignition::math::AxisAlignedBox bbox;
+    std::string name;
+};
+
 /// A Gazebo system plugin that computes a 2D RF signal-strength heatmap
 /// around a gNB position and publishes it as an ignition.msgs.Image.
+/// Includes RF occlusion from buildings/obstacles.
 class HeatmapPlugin
     : public ignition::gazebo::System,
       public ignition::gazebo::ISystemConfigure,
@@ -22,14 +33,12 @@ public:
     HeatmapPlugin() = default;
     ~HeatmapPlugin() override;
 
-    // ISystemConfigure: called once when the plugin loads
     void Configure(
         const ignition::gazebo::Entity &_entity,
         const std::shared_ptr<const sdf::Element> &_sdf,
         ignition::gazebo::EntityComponentManager &_ecm,
         ignition::gazebo::EventManager &_eventMgr) override;
 
-    // ISystemPreUpdate: called each simulation step before physics
     void PreUpdate(
         const ignition::gazebo::UpdateInfo &_info,
         ignition::gazebo::EntityComponentManager &_ecm) override;
@@ -39,23 +48,26 @@ private:
     void WorkerLoop();
 
     /// Compute Free-Space Path Loss in dB
-    /// @param d Distance in meters
-    /// @param f Frequency in Hz
-    /// @return FSPL in dB
     static double FSPL_dB(double d, double f);
 
     /// Publish the current heatmap buffer as an Image message
     void PublishHeatmap();
 
-    /// Check line-of-sight occlusion between two points using the ECM
-    /// @param from Source position
-    /// @param to Target position
-    /// @param ecm Entity component manager
-    /// @return true if path is blocked
-    bool IsOccluded(
+    /// Update obstacle list from the ECM
+    void UpdateObstacles(ignition::gazebo::EntityComponentManager &_ecm);
+
+    /// Check if a ray from 'from' to 'to' intersects any obstacle
+    /// Returns the number of obstacles intersected (for multi-wall penetration)
+    int CountOcclusions(
         const ignition::math::Vector3d &from,
-        const ignition::math::Vector3d &to,
-        ignition::gazebo::EntityComponentManager &ecm);
+        const ignition::math::Vector3d &to) const;
+
+    /// Ray-AABB intersection test
+    static bool RayIntersectsAABB(
+        const ignition::math::Vector3d &rayOrigin,
+        const ignition::math::Vector3d &rayDir,
+        double rayLength,
+        const ignition::math::AxisAlignedBox &box);
 
     // Transport
     ignition::transport::Node node;
@@ -67,9 +79,9 @@ private:
     double cellSize{0.5};  // meters per cell
 
     // RF parameters
-    double freqHz{3.5e9};      // 3.5 GHz (typical 5G n78 band)
-    double ptxDbm{30.0};       // Transmit power in dBm
-    double blockLossDb{20.0};  // Additional loss when blocked
+    double freqHz{3.5e9};
+    double ptxDbm{30.0};
+    double wallLossDb{15.0};  // Loss per wall/obstacle penetration
 
     // gNB position
     ignition::math::Vector3d gnbPos{0, 0, 1.5};
@@ -78,14 +90,14 @@ private:
     std::vector<float> pixels;
     std::mutex bufMutex;
 
+    // Obstacle list
+    std::vector<Obstacle> obstacles;
+    std::mutex obstacleMutex;
+    std::atomic<bool> obstaclesUpdated{false};
+
     // Worker thread control
     std::thread worker;
     std::atomic<bool> running{false};
-    std::atomic<bool> needsUpdate{true};
-
-    // Pointer to ECM for worker thread (protected by mutex)
-    ignition::gazebo::EntityComponentManager *ecmPtr{nullptr};
-    std::mutex ecmMutex;
 };
 
 }  // namespace heatmap_plugin
