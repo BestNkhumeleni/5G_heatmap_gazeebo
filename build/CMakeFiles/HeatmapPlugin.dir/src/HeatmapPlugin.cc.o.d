@@ -789,6 +789,8 @@ CMakeFiles/HeatmapPlugin.dir/src/HeatmapPlugin.cc.o: \
  /usr/include/ignition/msgs8/gz/msgs/Utility.hh \
  /usr/include/ignition/gazebo6/ignition/gazebo/components/Visual.hh \
  /usr/include/ignition/gazebo6/gz/sim/components/Visual.hh \
+ /usr/include/ignition/gazebo6/ignition/gazebo/components/Collision.hh \
+ /usr/include/ignition/gazebo6/gz/sim/components/Collision.hh \
  /usr/include/ignition/gazebo6/ignition/gazebo/components/Link.hh \
  /usr/include/ignition/gazebo6/gz/sim/components/Link.hh \
  /usr/include/ignition/gazebo6/ignition/gazebo/components/Model.hh \
@@ -796,7 +798,15 @@ CMakeFiles/HeatmapPlugin.dir/src/HeatmapPlugin.cc.o: \
  /usr/include/ignition/sdformat12/sdf/Model.hh \
  /usr/include/ignition/sdformat12/sdf/OutputConfig.hh \
  /usr/include/ignition/sdformat12/sdf/Root.hh \
+ /usr/include/ignition/gazebo6/ignition/gazebo/components/Name.hh \
+ /usr/include/ignition/gazebo6/gz/sim/components/Name.hh \
+ /usr/include/ignition/gazebo6/ignition/gazebo/components/Static.hh \
+ /usr/include/ignition/gazebo6/gz/sim/components/Static.hh \
+ /usr/include/ignition/gazebo6/ignition/gazebo/components/ParentEntity.hh \
+ /usr/include/ignition/gazebo6/gz/sim/components/ParentEntity.hh \
  /usr/include/ignition/gazebo6/ignition/gazebo/Util.hh \
  /usr/include/ignition/gazebo6/gz/sim/Util.hh \
  /usr/include/ignition/common4/ignition/common/Console.hh \
- /usr/include/ignition/common4/ignition/common/config.hh
+ /usr/include/ignition/common4/ignition/common/config.hh \
+ /usr/include/ignition/sdformat12/sdf/Box.hh \
+ /usr/include/ignition/sdformat12/sdf/Cylinder.hh

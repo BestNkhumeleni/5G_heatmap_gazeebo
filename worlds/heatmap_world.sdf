@@ -2,38 +2,106 @@
 <sdf version="1.8">
   <world name="heatmap_world">
     
-    <!-- Physics -->
     <physics name="1ms" type="ignored">
       <max_step_size>0.001</max_step_size>
       <real_time_factor>1.0</real_time_factor>
     </physics>
 
-    <!-- Plugins -->
-    <plugin
-      filename="ignition-gazebo-physics-system"
-      name="ignition::gazebo::systems::Physics">
+    <!-- Required system plugins -->
+    <plugin filename="ignition-gazebo-physics-system"
+            name="ignition::gazebo::systems::Physics">
     </plugin>
-    <plugin
-      filename="ignition-gazebo-scene-broadcaster-system"
-      name="ignition::gazebo::systems::SceneBroadcaster">
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="ignition::gazebo::systems::SceneBroadcaster">
     </plugin>
-    <plugin
-      filename="ignition-gazebo-user-commands-system"
-      name="ignition::gazebo::systems::UserCommands">
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="ignition::gazebo::systems::UserCommands">
     </plugin>
 
     <!-- Heatmap Plugin -->
-    <plugin
-      filename="libHeatmapPlugin.so"
-      name="heatmap_plugin::HeatmapPlugin">
+    <plugin filename="libHeatmapPlugin.so"
+            name="heatmap_plugin::HeatmapPlugin">
       <grid_w>128</grid_w>
       <grid_h>128</grid_h>
       <cell_size>0.5</cell_size>
       <frequency_hz>3500000000</frequency_hz>
       <tx_dbm>30.0</tx_dbm>
       <gnb_pose>0 0 1.5 0 0 0</gnb_pose>
-      <block_loss_db>20.0</block_loss_db>
+      <wall_loss_db>15.0</wall_loss_db>
     </plugin>
+
+    <!-- GUI Configuration with ImageDisplay -->
+    <gui fullscreen="0">
+      <plugin filename="GzScene3D" name="3D View">
+        <ignition-gui>
+          <title>3D View</title>
+          <property type="bool" key="showTitleBar">true</property>
+          <property type="string" key="state">docked</property>
+        </ignition-gui>
+        <engine>ogre2</engine>
+        <scene>scene</scene>
+        <ambient_light>0.4 0.4 0.4</ambient_light>
+        <background_color>0.8 0.8 0.8</background_color>
+        <camera_pose>25 -25 20 0 0.6 2.35</camera_pose>
+      </plugin>
+
+      <plugin filename="WorldControl" name="World control">
+        <ignition-gui>
+          <title>World control</title>
+          <property type="bool" key="showTitleBar">false</property>
+          <property type="bool" key="resizable">false</property>
+          <property type="double" key="height">72</property>
+          <property type="double" key="width">121</property>
+          <property type="double" key="z">1</property>
+          <property type="string" key="state">floating</property>
+          <anchors target="3D View">
+            <line own="left" target="left"/>
+            <line own="bottom" target="bottom"/>
+          </anchors>
+        </ignition-gui>
+        <play_pause>true</play_pause>
+        <step>true</step>
+        <start_paused>false</start_paused>
+      </plugin>
+
+      <plugin filename="WorldStats" name="World stats">
+        <ignition-gui>
+          <title>World stats</title>
+          <property type="bool" key="showTitleBar">false</property>
+          <property type="bool" key="resizable">false</property>
+          <property type="double" key="height">110</property>
+          <property type="double" key="width">290</property>
+          <property type="double" key="z">1</property>
+          <property type="string" key="state">floating</property>
+          <anchors target="3D View">
+            <line own="right" target="right"/>
+            <line own="bottom" target="bottom"/>
+          </anchors>
+        </ignition-gui>
+        <sim_time>true</sim_time>
+        <real_time>true</real_time>
+        <real_time_factor>true</real_time_factor>
+        <iterations>true</iterations>
+      </plugin>
+
+      <!-- Image Display for Heatmap -->
+      <plugin filename="ImageDisplay" name="RF Heatmap">
+        <ignition-gui>
+          <title>RF Signal Heatmap</title>
+          <property type="bool" key="showTitleBar">true</property>
+          <property type="string" key="state">docked</property>
+        </ignition-gui>
+        <topic>/gnb/heatmap</topic>
+      </plugin>
+
+      <plugin filename="EntityTree" name="Entity tree">
+        <ignition-gui>
+          <title>Entity tree</title>
+          <property type="bool" key="showTitleBar">true</property>
+          <property type="string" key="state">docked</property>
+        </ignition-gui>
+      </plugin>
+    </gui>
 
     <!-- Lighting -->
     <light type="directional" name="sun">
@@ -72,13 +140,12 @@
           <material>
             <ambient>0.8 0.8 0.8 1</ambient>
             <diffuse>0.8 0.8 0.8 1</diffuse>
-            <specular>0.8 0.8 0.8 1</specular>
           </material>
         </visual>
       </link>
     </model>
 
-    <!-- gNB Tower Model (visual reference) -->
+    <!-- gNB Tower (at origin) -->
     <model name="gnb_tower">
       <static>true</static>
       <pose>0 0 0.75 0 0 0</pose>
@@ -110,27 +177,153 @@
       </link>
     </model>
 
-    <!-- Example obstacle (building) -->
-    <model name="building_1">
+    <!-- Building 1: Large office building -->
+    <model name="building_office">
       <static>true</static>
-      <pose>5 3 2.5 0 0 0</pose>
+      <pose>10 5 3 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry>
             <box>
-              <size>4 4 5</size>
+              <size>8 6 6</size>
             </box>
           </geometry>
         </collision>
         <visual name="visual">
           <geometry>
             <box>
-              <size>4 4 5</size>
+              <size>8 6 6</size>
             </box>
           </geometry>
           <material>
-            <ambient>0.6 0.6 0.7 1</ambient>
-            <diffuse>0.7 0.7 0.8 1</diffuse>
+            <ambient>0.5 0.5 0.6 1</ambient>
+            <diffuse>0.6 0.6 0.7 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Building 2: Residential block -->
+    <model name="building_residential">
+      <static>true</static>
+      <pose>-8 8 2.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>5 5 5</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>5 5 5</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.6 0.4 0.3 1</ambient>
+            <diffuse>0.7 0.5 0.4 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Building 3: Small shop -->
+    <model name="building_shop">
+      <static>true</static>
+      <pose>5 -10 1.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>4 3 3</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>4 3 3</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.4 0.5 0.4 1</ambient>
+            <diffuse>0.5 0.6 0.5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Building 4: Tall tower -->
+    <model name="building_tower">
+      <static>true</static>
+      <pose>-12 -8 5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>4 4 10</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>4 4 10</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.3 0.3 0.5 1</ambient>
+            <diffuse>0.4 0.4 0.6 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Building 5: L-shaped building (two boxes) -->
+    <model name="building_lshaped">
+      <static>true</static>
+      <pose>15 -5 0 0 0 0</pose>
+      <link name="link_main">
+        <pose>0 0 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>6 3 4</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>6 3 4</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.5 0.4 0.5 1</ambient>
+            <diffuse>0.6 0.5 0.6 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="link_wing">
+        <pose>-1.5 -3 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>3 3 4</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>3 3 4</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.5 0.4 0.5 1</ambient>
+            <diffuse>0.6 0.5 0.6 1</diffuse>
           </material>
         </visual>
       </link>

@@ -8,22 +8,22 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <string>
 
 namespace heatmap_plugin
 {
 
-/// Represents an obstacle (building) for RF occlusion calculations
+/// Represents a building/obstacle that blocks RF signals
 struct Obstacle
 {
+    std::string name;
     ignition::math::Vector3d position;
     ignition::math::Vector3d size;
     ignition::math::AxisAlignedBox bbox;
-    std::string name;
 };
 
 /// A Gazebo system plugin that computes a 2D RF signal-strength heatmap
-/// around a gNB position and publishes it as an ignition.msgs.Image.
-/// Includes RF occlusion from buildings/obstacles.
+/// around a gNB position with building occlusion support.
 class HeatmapPlugin
     : public ignition::gazebo::System,
       public ignition::gazebo::ISystemConfigure,
@@ -56,18 +56,20 @@ private:
     /// Update obstacle list from the ECM
     void UpdateObstacles(ignition::gazebo::EntityComponentManager &_ecm);
 
-    /// Check if a ray from 'from' to 'to' intersects any obstacle
-    /// Returns the number of obstacles intersected (for multi-wall penetration)
-    int CountOcclusions(
-        const ignition::math::Vector3d &from,
-        const ignition::math::Vector3d &to) const;
-
-    /// Ray-AABB intersection test
+    /// Check if a ray intersects an axis-aligned bounding box
     static bool RayIntersectsAABB(
         const ignition::math::Vector3d &rayOrigin,
         const ignition::math::Vector3d &rayDir,
         double rayLength,
         const ignition::math::AxisAlignedBox &box);
+
+    /// Count how many obstacles a ray passes through
+    int CountOcclusions(
+        const ignition::math::Vector3d &from,
+        const ignition::math::Vector3d &to) const;
+
+    /// Check if a point is inside any obstacle
+    bool IsInsideObstacle(const ignition::math::Vector3d &point) const;
 
     // Transport
     ignition::transport::Node node;
@@ -81,23 +83,26 @@ private:
     // RF parameters
     double freqHz{3.5e9};
     double ptxDbm{30.0};
-    double wallLossDb{15.0};  // Loss per wall/obstacle penetration
+    double wallLossDb{15.0};  // Loss per wall penetration
 
     // gNB position
     ignition::math::Vector3d gnbPos{0, 0, 1.5};
 
     // Heatmap buffer (dBm values)
     std::vector<float> pixels;
-    std::mutex bufMutex;
+    mutable std::mutex bufMutex;
 
-    // Obstacle list
+    // Obstacles
     std::vector<Obstacle> obstacles;
-    std::mutex obstacleMutex;
+    mutable std::mutex obstacleMutex;
     std::atomic<bool> obstaclesUpdated{false};
 
     // Worker thread control
     std::thread worker;
     std::atomic<bool> running{false};
+    
+    // Force recalculation when obstacles change
+    std::atomic<bool> needsRecalculation{true};
 };
 
 }  // namespace heatmap_plugin
