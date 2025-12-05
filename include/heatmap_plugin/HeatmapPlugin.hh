@@ -27,7 +27,7 @@ struct Obstacle
 };
 
 /// A Gazebo system plugin that computes a 2D RF signal-strength heatmap
-/// with multiple propagation model support.
+/// with multiple propagation model support and interactive features.
 class HeatmapPlugin
     : public ignition::gazebo::System,
       public ignition::gazebo::ISystemConfigure,
@@ -63,6 +63,15 @@ private:
     /// Handle config update requests
     void OnConfigUpdate(const ignition::msgs::StringMsg &_msg);
 
+    /// Handle mouse click events for signal strength queries
+    void OnMouseClick(const ignition::msgs::Vector3d &_msg);
+
+    /// Handle gNB position change requests
+    void OnGnbPoseChange(const ignition::msgs::Pose &_msg);
+
+    /// Query signal strength at a specific position
+    void QuerySignalAtPosition(const ignition::math::Vector3d &_pos);
+
     /// Publish current configuration status
     void PublishStatus();
 
@@ -70,6 +79,8 @@ private:
     ignition::transport::Node node;
     ignition::transport::Node::Publisher heatmapPub;
     ignition::transport::Node::Publisher statusPub;
+    ignition::transport::Node::Publisher clickInfoPub;
+    ignition::transport::Node::Publisher queryResultPub;
 
     // Grid parameters
     int gridW{128};
@@ -99,6 +110,9 @@ private:
     
     // Status publishing
     uint64_t lastStatusPublish{0};
+    
+    // Interactive features
+    bool enableClickQuery{true};
 };
 
 }  // namespace heatmap_plugin

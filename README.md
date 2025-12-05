@@ -29,8 +29,18 @@ ign topic -t /gnb/heatmap/set_model -m ignition.msgs.StringMsg -p 'data: "ray_tr
 # Change to 3GPP UMi
 ign topic -t /gnb/heatmap/set_model -m ignition.msgs.StringMsg -p 'data: "3gpp_umi"'
 
+# Change to 3GPP UMa
+ign topic -t /gnb/heatmap/set_model -m ignition.msgs.StringMsg -p 'data: "3gpp_uma"'
+
 # Update configuration
 ign topic -t /gnb/heatmap/config -m ignition.msgs.StringMsg -p 'data: "tx_power=40;wall_loss=20"'
+
+##Or use the scipt:
+chmod +x scripts/heatmap_control.sh
+./scripts/heatmap_control.sh model ray_tracing
+./scripts/heatmap_control.sh power 40
+./scripts/heatmap_control.sh status
+
 
 # Check current status
 ign topic -e -t /gnb/heatmap/status -n 1

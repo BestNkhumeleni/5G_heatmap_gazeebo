@@ -13,6 +13,8 @@
 #include <ignition/gazebo/Util.hh>
 #include <ignition/msgs/image.pb.h>
 #include <ignition/msgs/stringmsg.pb.h>
+#include <ignition/msgs/vector3d.pb.h>
+#include <ignition/msgs/pose.pb.h>
 #include <ignition/common/Console.hh>
 #include <sdf/Geometry.hh>
 #include <sdf/Box.hh>
@@ -105,6 +107,10 @@ void HeatmapPlugin::Configure(
         propConfig.maxReflections = sdf->Get<int>("max_reflections");
     if (sdf->HasElement("max_diffractions"))
         propConfig.maxDiffractions = sdf->Get<int>("max_diffractions");
+    
+    // Interactive features
+    if (sdf->HasElement("enable_click_query"))
+        enableClickQuery = sdf->Get<bool>("enable_click_query");
 
     // Initialize propagation model
     propModel = PropagationModelFactory::Create(propConfig.model);
@@ -115,10 +121,14 @@ void HeatmapPlugin::Configure(
     // Setup publishers
     heatmapPub = node.Advertise<msgs::Image>("/gnb/heatmap");
     statusPub = node.Advertise<msgs::StringMsg>("/gnb/heatmap/status");
+    clickInfoPub = node.Advertise<msgs::StringMsg>("/gnb/heatmap/click_info");
+    queryResultPub = node.Advertise<msgs::StringMsg>("/gnb/heatmap/query_result");
 
     // Setup subscribers for runtime configuration
     node.Subscribe("/gnb/heatmap/set_model", &HeatmapPlugin::OnModelChangeRequest, this);
     node.Subscribe("/gnb/heatmap/config", &HeatmapPlugin::OnConfigUpdate, this);
+    node.Subscribe("/gnb/heatmap/set_position", &HeatmapPlugin::OnGnbPoseChange, this);
+    node.Subscribe("/gnb/heatmap/query_position", &HeatmapPlugin::OnMouseClick, this);
 
     ignmsg << "=== HeatmapPlugin Configuration ===" << std::endl;
     ignmsg << "  Grid: " << gridW << "x" << gridH << " (" << (gridW * cellSize) << "x" << (gridH * cellSize) << " m)" << std::endl;
@@ -129,11 +139,15 @@ void HeatmapPlugin::Configure(
     ignmsg << "  Propagation Model: " << propModel->GetName() << std::endl;
     ignmsg << "  Wall Penetration Loss: " << propConfig.defaultMaterial.penetrationLoss_dB << " dB" << std::endl;
     ignmsg << "  Shadowing: " << (propConfig.includeShadowing ? "enabled" : "disabled") << std::endl;
+    ignmsg << "  Click Query: " << (enableClickQuery ? "enabled" : "disabled") << std::endl;
     ignmsg << "===============================" << std::endl;
     ignmsg << "Runtime control topics:" << std::endl;
     ignmsg << "  /gnb/heatmap/set_model - Change propagation model" << std::endl;
     ignmsg << "  /gnb/heatmap/config - Update configuration" << std::endl;
+    ignmsg << "  /gnb/heatmap/set_position - Move gNB transmitter" << std::endl;
+    ignmsg << "  /gnb/heatmap/query_position - Query signal at position" << std::endl;
     ignmsg << "  /gnb/heatmap/status - Current status (published)" << std::endl;
+    ignmsg << "  /gnb/heatmap/click_info - Click query results" << std::endl;
 
     // Initial obstacle scan
     UpdateObstacles(_ecm);
@@ -220,12 +234,109 @@ void HeatmapPlugin::OnConfigUpdate(const msgs::StringMsg &_msg)
     needsRecalculation = true;
 }
 
+void HeatmapPlugin::OnGnbPoseChange(const msgs::Pose &_msg)
+{
+    math::Vector3d newPos(
+        _msg.position().x(),
+        _msg.position().y(),
+        _msg.position().z()
+    );
+    
+    {
+        std::lock_guard<std::mutex> lock(modelMutex);
+        gnbPos = newPos;
+        propConfig.txHeightM = gnbPos.Z();
+    }
+    
+    needsRecalculation = true;
+    ignmsg << "gNB position updated to: (" << gnbPos.X() << ", " 
+           << gnbPos.Y() << ", " << gnbPos.Z() << ")" << std::endl;
+}
+
+void HeatmapPlugin::OnMouseClick(const msgs::Vector3d &_msg)
+{
+    if (!enableClickQuery)
+        return;
+    
+    math::Vector3d clickPos(_msg.x(), _msg.y(), _msg.z());
+    QuerySignalAtPosition(clickPos);
+}
+
+void HeatmapPlugin::QuerySignalAtPosition(const math::Vector3d &_pos)
+{
+    // Copy data for thread safety
+    std::vector<Obstacle> localObstacles;
+    PropagationConfig localConfig;
+    std::unique_ptr<IPropagationModel> localModel;
+    math::Vector3d localGnbPos;
+    
+    {
+        std::lock_guard<std::mutex> lock1(obstacleMutex);
+        std::lock_guard<std::mutex> lock2(modelMutex);
+        localObstacles = obstacles;
+        localConfig = propConfig;
+        localModel = PropagationModelFactory::Create(localConfig.model);
+        localGnbPos = gnbPos;
+    }
+    
+    // Calculate signal strength at queried position
+    math::Vector3d queryPos(_pos.X(), _pos.Y(), localConfig.rxHeightM);
+    double signalDbm = localModel->CalculateReceivedPower(
+        localGnbPos, queryPos, localObstacles, localConfig);
+    
+    // Calculate distance
+    double distance = localGnbPos.Distance(queryPos);
+    
+    // Publish detailed result
+    std::ostringstream detailOss;
+    detailOss << std::fixed << std::setprecision(2);
+    detailOss << "=== Signal Query Result ===" << std::endl;
+    detailOss << "Position: (" << _pos.X() << ", " << _pos.Y() << ", " << _pos.Z() << ")" << std::endl;
+    detailOss << "Distance from gNB: " << distance << " m" << std::endl;
+    detailOss << "Signal Strength: " << signalDbm << " dBm" << std::endl;
+    detailOss << "Model: " << localModel->GetName() << std::endl;
+    
+    // Signal quality interpretation
+    if (signalDbm >= -70)
+        detailOss << "Quality: Excellent" << std::endl;
+    else if (signalDbm >= -85)
+        detailOss << "Quality: Good" << std::endl;
+    else if (signalDbm >= -100)
+        detailOss << "Quality: Fair" << std::endl;
+    else if (signalDbm >= -115)
+        detailOss << "Quality: Poor" << std::endl;
+    else
+        detailOss << "Quality: Very Poor/No Service" << std::endl;
+    
+    std::string detailStr = detailOss.str();
+    
+    // Publish to terminal
+    ignmsg << detailStr;
+    
+    // Publish to topic for GUI display
+    msgs::StringMsg clickMsg;
+    std::ostringstream clickOss;
+    clickOss << std::fixed << std::setprecision(1);
+    clickOss << "Pos: (" << _pos.X() << ", " << _pos.Y() << ") | "
+             << "Signal: " << signalDbm << " dBm | "
+             << "Dist: " << distance << " m";
+    clickMsg.set_data(clickOss.str());
+    clickInfoPub.Publish(clickMsg);
+    
+    // Publish detailed result
+    msgs::StringMsg resultMsg;
+    resultMsg.set_data(detailStr);
+    queryResultPub.Publish(resultMsg);
+}
+
 void HeatmapPlugin::PublishStatus()
 {
     std::ostringstream oss;
+    oss << std::fixed << std::setprecision(2);
     oss << "model=" << propModel->GetName() << ";"
         << "frequency=" << propConfig.frequencyHz << ";"
         << "tx_power=" << propConfig.txPowerDbm << ";"
+        << "tx_pos=(" << gnbPos.X() << "," << gnbPos.Y() << "," << gnbPos.Z() << ");"
         << "tx_height=" << propConfig.txHeightM << ";"
         << "rx_height=" << propConfig.rxHeightM << ";"
         << "wall_loss=" << propConfig.defaultMaterial.penetrationLoss_dB << ";"
