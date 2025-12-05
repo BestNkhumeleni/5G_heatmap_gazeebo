@@ -9,28 +9,63 @@
 
     <!-- Required system plugins -->
     <plugin filename="ignition-gazebo-physics-system"
-            name="ignition::gazebo::systems::Physics">
-    </plugin>
+            name="ignition::gazebo::systems::Physics"/>
     <plugin filename="ignition-gazebo-scene-broadcaster-system"
-            name="ignition::gazebo::systems::SceneBroadcaster">
-    </plugin>
+            name="ignition::gazebo::systems::SceneBroadcaster"/>
     <plugin filename="ignition-gazebo-user-commands-system"
-            name="ignition::gazebo::systems::UserCommands">
-    </plugin>
+            name="ignition::gazebo::systems::UserCommands"/>
 
-    <!-- Heatmap Plugin -->
+    <!-- 
+      Heatmap Plugin with Propagation Model Configuration
+      
+      Available propagation models:
+        - free_space / fspl      : Simple Free Space Path Loss
+        - 3gpp_umi / umi         : 3GPP TR 38.901 Urban Micro
+        - 3gpp_uma / uma         : 3GPP TR 38.901 Urban Macro
+        - ray_tracing / raytracing : Ray Tracing with reflections
+        - hybrid                 : Combined 3GPP + Ray Tracing
+      
+      Runtime control via topics:
+        ign topic -t /gnb/heatmap/set_model -m ignition.msgs.StringMsg -p 'data: "ray_tracing"'
+        ign topic -t /gnb/heatmap/config -m ignition.msgs.StringMsg -p 'data: "tx_power=40;wall_loss=20"'
+        ign topic -e -t /gnb/heatmap/status
+    -->
     <plugin filename="libHeatmapPlugin.so"
             name="heatmap_plugin::HeatmapPlugin">
+      <!-- Grid configuration -->
       <grid_w>128</grid_w>
       <grid_h>128</grid_h>
       <cell_size>0.5</cell_size>
-      <frequency_hz>3500000000</frequency_hz>
-      <tx_dbm>30.0</tx_dbm>
-      <gnb_pose>0 0 1.5 0 0 0</gnb_pose>
-      <wall_loss_db>15.0</wall_loss_db>
+      
+      <!-- RF parameters -->
+      <frequency_hz>3500000000</frequency_hz>  <!-- 3.5 GHz (5G n78 band) -->
+      <tx_dbm>30.0</tx_dbm>                    <!-- 1W transmit power -->
+      <tx_height>10.0</tx_height>              <!-- gNB antenna height -->
+      <rx_height>1.5</rx_height>               <!-- UE height (pedestrian) -->
+      <tx_gain_dbi>8.0</tx_gain_dbi>           <!-- Antenna gain -->
+      <rx_gain_dbi>0.0</rx_gain_dbi>
+      
+      <!-- gNB position -->
+      <gnb_pose>0 0 10 0 0 0</gnb_pose>
+      
+      <!-- Propagation model: free_space, 3gpp_umi, 3gpp_uma, ray_tracing, hybrid -->
+      <propagation_model>3gpp_umi</propagation_model>
+      
+      <!-- Material/obstacle properties -->
+      <wall_loss_db>15.0</wall_loss_db>        <!-- Penetration loss per wall -->
+      <reflection_coeff>0.7</reflection_coeff>  <!-- For ray tracing -->
+      
+      <!-- Shadowing (log-normal fading) -->
+      <include_shadowing>false</include_shadowing>
+      <shadowing_std_los>4.0</shadowing_std_los>
+      <shadowing_std_nlos>7.82</shadowing_std_nlos>
+      
+      <!-- Ray tracing options -->
+      <max_reflections>2</max_reflections>
+      <max_diffractions>1</max_diffractions>
     </plugin>
 
-    <!-- GUI Configuration with ImageDisplay -->
+    <!-- GUI Configuration -->
     <gui fullscreen="0">
       <plugin filename="GzScene3D" name="3D View">
         <ignition-gui>
@@ -42,7 +77,7 @@
         <scene>scene</scene>
         <ambient_light>0.4 0.4 0.4</ambient_light>
         <background_color>0.8 0.8 0.8</background_color>
-        <camera_pose>25 -25 20 0 0.6 2.35</camera_pose>
+        <camera_pose>40 -40 35 0 0.6 2.35</camera_pose>
       </plugin>
 
       <plugin filename="WorldControl" name="World control">
@@ -84,7 +119,6 @@
         <iterations>true</iterations>
       </plugin>
 
-      <!-- Image Display for Heatmap -->
       <plugin filename="ImageDisplay" name="RF Heatmap">
         <ignition-gui>
           <title>RF Signal Heatmap</title>
@@ -109,12 +143,6 @@
       <pose>0 0 10 0 0 0</pose>
       <diffuse>0.8 0.8 0.8 1</diffuse>
       <specular>0.2 0.2 0.2 1</specular>
-      <attenuation>
-        <range>1000</range>
-        <constant>0.9</constant>
-        <linear>0.01</linear>
-        <quadratic>0.001</quadratic>
-      </attenuation>
       <direction>-0.5 0.1 -0.9</direction>
     </light>
 
@@ -124,207 +152,151 @@
       <link name="link">
         <collision name="collision">
           <geometry>
-            <plane>
-              <normal>0 0 1</normal>
-              <size>100 100</size>
-            </plane>
+            <plane><normal>0 0 1</normal><size>200 200</size></plane>
           </geometry>
         </collision>
         <visual name="visual">
           <geometry>
-            <plane>
-              <normal>0 0 1</normal>
-              <size>100 100</size>
-            </plane>
+            <plane><normal>0 0 1</normal><size>200 200</size></plane>
           </geometry>
           <material>
-            <ambient>0.8 0.8 0.8 1</ambient>
-            <diffuse>0.8 0.8 0.8 1</diffuse>
+            <ambient>0.7 0.7 0.7 1</ambient>
+            <diffuse>0.7 0.7 0.7 1</diffuse>
           </material>
         </visual>
       </link>
     </model>
 
-    <!-- gNB Tower (at origin) -->
+    <!-- gNB Tower -->
     <model name="gnb_tower">
       <static>true</static>
-      <pose>0 0 0.75 0 0 0</pose>
+      <pose>0 0 5 0 0 0</pose>
       <link name="tower_link">
-        <visual name="tower_visual">
-          <geometry>
-            <cylinder>
-              <radius>0.1</radius>
-              <length>1.5</length>
-            </cylinder>
-          </geometry>
-          <material>
-            <ambient>0.3 0.3 0.3 1</ambient>
-            <diffuse>0.5 0.5 0.5 1</diffuse>
-          </material>
+        <visual name="pole">
+          <geometry><cylinder><radius>0.15</radius><length>10</length></cylinder></geometry>
+          <material><ambient>0.4 0.4 0.4 1</ambient></material>
         </visual>
-        <visual name="antenna_visual">
-          <pose>0 0 0.9 0 0 0</pose>
-          <geometry>
-            <box>
-              <size>0.3 0.1 0.5</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.8 0.2 0.2 1</ambient>
-            <diffuse>0.9 0.3 0.3 1</diffuse>
-          </material>
+        <visual name="antenna">
+          <pose>0 0 5.5 0 0 0</pose>
+          <geometry><box><size>0.4 0.15 0.8</size></box></geometry>
+          <material><ambient>0.8 0.2 0.2 1</ambient></material>
         </visual>
       </link>
     </model>
 
-    <!-- Building 1: Large office building -->
+    <!-- Urban environment buildings -->
+    
+    <!-- Large office building -->
     <model name="building_office">
       <static>true</static>
-      <pose>10 5 3 0 0 0</pose>
+      <pose>15 8 4 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry>
-            <box>
-              <size>8 6 6</size>
-            </box>
-          </geometry>
+          <geometry><box><size>12 8 8</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry>
-            <box>
-              <size>8 6 6</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.5 0.5 0.6 1</ambient>
-            <diffuse>0.6 0.6 0.7 1</diffuse>
-          </material>
+          <geometry><box><size>12 8 8</size></box></geometry>
+          <material><ambient>0.5 0.5 0.6 1</ambient></material>
         </visual>
       </link>
     </model>
 
-    <!-- Building 2: Residential block -->
+    <!-- Residential tower -->
     <model name="building_residential">
       <static>true</static>
-      <pose>-8 8 2.5 0 0 0</pose>
+      <pose>-12 12 7.5 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry>
-            <box>
-              <size>5 5 5</size>
-            </box>
-          </geometry>
+          <geometry><box><size>6 6 15</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry>
-            <box>
-              <size>5 5 5</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.6 0.4 0.3 1</ambient>
-            <diffuse>0.7 0.5 0.4 1</diffuse>
-          </material>
+          <geometry><box><size>6 6 15</size></box></geometry>
+          <material><ambient>0.6 0.4 0.3 1</ambient></material>
         </visual>
       </link>
     </model>
 
-    <!-- Building 3: Small shop -->
-    <model name="building_shop">
+    <!-- Shopping center -->
+    <model name="building_shopping">
       <static>true</static>
-      <pose>5 -10 1.5 0 0 0</pose>
+      <pose>8 -15 2.5 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry>
-            <box>
-              <size>4 3 3</size>
-            </box>
-          </geometry>
+          <geometry><box><size>16 10 5</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry>
-            <box>
-              <size>4 3 3</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.4 0.5 0.4 1</ambient>
-            <diffuse>0.5 0.6 0.5 1</diffuse>
-          </material>
+          <geometry><box><size>16 10 5</size></box></geometry>
+          <material><ambient>0.4 0.5 0.4 1</ambient></material>
         </visual>
       </link>
     </model>
 
-    <!-- Building 4: Tall tower -->
+    <!-- Small building cluster -->
+    <model name="building_small1">
+      <static>true</static>
+      <pose>-18 -10 2 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>4 4 4</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>4 4 4</size></box></geometry>
+          <material><ambient>0.5 0.45 0.4 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="building_small2">
+      <static>true</static>
+      <pose>-22 -6 3 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>5 5 6</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>5 5 6</size></box></geometry>
+          <material><ambient>0.55 0.5 0.45 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Tall narrow building (creates interesting shadow) -->
     <model name="building_tower">
       <static>true</static>
-      <pose>-12 -8 5 0 0 0</pose>
+      <pose>20 -5 10 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry>
-            <box>
-              <size>4 4 10</size>
-            </box>
-          </geometry>
+          <geometry><box><size>4 4 20</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry>
-            <box>
-              <size>4 4 10</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.3 0.3 0.5 1</ambient>
-            <diffuse>0.4 0.4 0.6 1</diffuse>
-          </material>
+          <geometry><box><size>4 4 20</size></box></geometry>
+          <material><ambient>0.3 0.3 0.5 1</ambient></material>
         </visual>
       </link>
     </model>
 
-    <!-- Building 5: L-shaped building (two boxes) -->
+    <!-- L-shaped building -->
     <model name="building_lshaped">
       <static>true</static>
-      <pose>15 -5 0 0 0 0</pose>
-      <link name="link_main">
-        <pose>0 0 2 0 0 0</pose>
+      <pose>-8 -20 0 0 0 0</pose>
+      <link name="main_wing">
+        <pose>0 0 3 0 0 0</pose>
         <collision name="collision">
-          <geometry>
-            <box>
-              <size>6 3 4</size>
-            </box>
-          </geometry>
+          <geometry><box><size>10 4 6</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry>
-            <box>
-              <size>6 3 4</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.5 0.4 0.5 1</ambient>
-            <diffuse>0.6 0.5 0.6 1</diffuse>
-          </material>
+          <geometry><box><size>10 4 6</size></box></geometry>
+          <material><ambient>0.5 0.4 0.5 1</ambient></material>
         </visual>
       </link>
-      <link name="link_wing">
-        <pose>-1.5 -3 2 0 0 0</pose>
+      <link name="side_wing">
+        <pose>-3 -4 3 0 0 0</pose>
         <collision name="collision">
-          <geometry>
-            <box>
-              <size>3 3 4</size>
-            </box>
-          </geometry>
+          <geometry><box><size>4 4 6</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry>
-            <box>
-              <size>3 3 4</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.5 0.4 0.5 1</ambient>
-            <diffuse>0.6 0.5 0.6 1</diffuse>
-          </material>
+          <geometry><box><size>4 4 6</size></box></geometry>
+          <material><ambient>0.5 0.4 0.5 1</ambient></material>
         </visual>
       </link>
     </model>

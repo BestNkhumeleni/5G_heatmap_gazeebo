@@ -15,6 +15,7 @@ find_package(ignition-common4 REQUIRED)
 # Create the plugin shared library
 add_library(HeatmapPlugin SHARED
     src/HeatmapPlugin.cc
+    src/PropagationModels.cc
 )
 
 target_include_directories(HeatmapPlugin PRIVATE
@@ -39,4 +40,9 @@ install(TARGETS HeatmapPlugin
 # Install world files
 install(DIRECTORY worlds/
     DESTINATION share/${PROJECT_NAME}/worlds
+)
+
+# Install headers (optional, for development)
+install(DIRECTORY include/
+    DESTINATION include
 )

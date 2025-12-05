@@ -9,6 +9,9 @@
 #include <atomic>
 #include <mutex>
 #include <string>
+#include <memory>
+
+#include "heatmap_plugin/PropagationModels.hh"
 
 namespace heatmap_plugin
 {
@@ -20,10 +23,11 @@ struct Obstacle
     ignition::math::Vector3d position;
     ignition::math::Vector3d size;
     ignition::math::AxisAlignedBox bbox;
+    MaterialProperties material;
 };
 
 /// A Gazebo system plugin that computes a 2D RF signal-strength heatmap
-/// around a gNB position with building occlusion support.
+/// with multiple propagation model support.
 class HeatmapPlugin
     : public ignition::gazebo::System,
       public ignition::gazebo::ISystemConfigure,
@@ -47,46 +51,38 @@ private:
     /// Background thread function that computes the heatmap
     void WorkerLoop();
 
-    /// Compute Free-Space Path Loss in dB
-    static double FSPL_dB(double d, double f);
-
     /// Publish the current heatmap buffer as an Image message
     void PublishHeatmap();
 
     /// Update obstacle list from the ECM
     void UpdateObstacles(ignition::gazebo::EntityComponentManager &_ecm);
 
-    /// Check if a ray intersects an axis-aligned bounding box
-    static bool RayIntersectsAABB(
-        const ignition::math::Vector3d &rayOrigin,
-        const ignition::math::Vector3d &rayDir,
-        double rayLength,
-        const ignition::math::AxisAlignedBox &box);
+    /// Handle model change requests
+    void OnModelChangeRequest(const ignition::msgs::StringMsg &_msg);
 
-    /// Count how many obstacles a ray passes through
-    int CountOcclusions(
-        const ignition::math::Vector3d &from,
-        const ignition::math::Vector3d &to) const;
+    /// Handle config update requests
+    void OnConfigUpdate(const ignition::msgs::StringMsg &_msg);
 
-    /// Check if a point is inside any obstacle
-    bool IsInsideObstacle(const ignition::math::Vector3d &point) const;
+    /// Publish current configuration status
+    void PublishStatus();
 
     // Transport
     ignition::transport::Node node;
     ignition::transport::Node::Publisher heatmapPub;
+    ignition::transport::Node::Publisher statusPub;
 
     // Grid parameters
     int gridW{128};
     int gridH{128};
-    double cellSize{0.5};  // meters per cell
-
-    // RF parameters
-    double freqHz{3.5e9};
-    double ptxDbm{30.0};
-    double wallLossDb{15.0};  // Loss per wall penetration
+    double cellSize{0.5};
 
     // gNB position
-    ignition::math::Vector3d gnbPos{0, 0, 1.5};
+    ignition::math::Vector3d gnbPos{0, 0, 10.0};
+
+    // Propagation configuration
+    PropagationConfig propConfig;
+    std::unique_ptr<IPropagationModel> propModel;
+    mutable std::mutex modelMutex;
 
     // Heatmap buffer (dBm values)
     std::vector<float> pixels;
@@ -95,14 +91,14 @@ private:
     // Obstacles
     std::vector<Obstacle> obstacles;
     mutable std::mutex obstacleMutex;
-    std::atomic<bool> obstaclesUpdated{false};
 
     // Worker thread control
     std::thread worker;
     std::atomic<bool> running{false};
-    
-    // Force recalculation when obstacles change
     std::atomic<bool> needsRecalculation{true};
+    
+    // Status publishing
+    uint64_t lastStatusPublish{0};
 };
 
 }  // namespace heatmap_plugin

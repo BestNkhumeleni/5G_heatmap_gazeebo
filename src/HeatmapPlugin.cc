@@ -12,12 +12,14 @@
 #include <ignition/gazebo/components/ParentEntity.hh>
 #include <ignition/gazebo/Util.hh>
 #include <ignition/msgs/image.pb.h>
+#include <ignition/msgs/stringmsg.pb.h>
 #include <ignition/common/Console.hh>
 #include <sdf/Geometry.hh>
 #include <sdf/Box.hh>
 #include <sdf/Cylinder.hh>
 #include <cmath>
 #include <algorithm>
+#include <sstream>
 
 using namespace heatmap_plugin;
 using namespace ignition;
@@ -38,41 +40,201 @@ void HeatmapPlugin::Configure(
 {
     auto sdf = const_cast<sdf::Element*>(_sdf.get());
     
+    // Grid parameters
     if (sdf->HasElement("grid_w"))
         gridW = sdf->Get<int>("grid_w");
     if (sdf->HasElement("grid_h"))
         gridH = sdf->Get<int>("grid_h");
     if (sdf->HasElement("cell_size"))
         cellSize = sdf->Get<double>("cell_size");
+    
+    // RF parameters
     if (sdf->HasElement("frequency_hz"))
-        freqHz = sdf->Get<double>("frequency_hz");
+        propConfig.frequencyHz = sdf->Get<double>("frequency_hz");
     if (sdf->HasElement("tx_dbm"))
-        ptxDbm = sdf->Get<double>("tx_dbm");
-    if (sdf->HasElement("wall_loss_db"))
-        wallLossDb = sdf->Get<double>("wall_loss_db");
+        propConfig.txPowerDbm = sdf->Get<double>("tx_dbm");
+    if (sdf->HasElement("tx_height"))
+        propConfig.txHeightM = sdf->Get<double>("tx_height");
+    if (sdf->HasElement("rx_height"))
+        propConfig.rxHeightM = sdf->Get<double>("rx_height");
+    if (sdf->HasElement("tx_gain_dbi"))
+        propConfig.txAntennaGainDbi = sdf->Get<double>("tx_gain_dbi");
+    if (sdf->HasElement("rx_gain_dbi"))
+        propConfig.rxAntennaGainDbi = sdf->Get<double>("rx_gain_dbi");
+    
+    // gNB position
     if (sdf->HasElement("gnb_pose"))
     {
         auto pose = sdf->Get<math::Pose3d>("gnb_pose");
         gnbPos = pose.Pos();
+        propConfig.txHeightM = gnbPos.Z();
     }
+    
+    // Material properties
+    if (sdf->HasElement("wall_loss_db"))
+        propConfig.defaultMaterial.penetrationLoss_dB = sdf->Get<double>("wall_loss_db");
+    if (sdf->HasElement("reflection_coeff"))
+        propConfig.defaultMaterial.reflectionCoeff = sdf->Get<double>("reflection_coeff");
+    
+    // Propagation model selection
+    std::string modelName = "3gpp_umi";
+    if (sdf->HasElement("propagation_model"))
+        modelName = sdf->Get<std::string>("propagation_model");
+    
+    if (modelName == "free_space" || modelName == "fspl")
+        propConfig.model = PropagationModel::FREE_SPACE;
+    else if (modelName == "3gpp_umi" || modelName == "umi")
+        propConfig.model = PropagationModel::THREE_GPP_UMI;
+    else if (modelName == "3gpp_uma" || modelName == "uma")
+        propConfig.model = PropagationModel::THREE_GPP_UMA;
+    else if (modelName == "ray_tracing" || modelName == "raytracing")
+        propConfig.model = PropagationModel::RAY_TRACING;
+    else if (modelName == "hybrid")
+        propConfig.model = PropagationModel::HYBRID;
+    
+    // Shadowing
+    if (sdf->HasElement("include_shadowing"))
+        propConfig.includeShadowing = sdf->Get<bool>("include_shadowing");
+    if (sdf->HasElement("shadowing_std_los"))
+        propConfig.shadowingStdLos_dB = sdf->Get<double>("shadowing_std_los");
+    if (sdf->HasElement("shadowing_std_nlos"))
+        propConfig.shadowingStdNlos_dB = sdf->Get<double>("shadowing_std_nlos");
+    
+    // Ray tracing specific
+    if (sdf->HasElement("max_reflections"))
+        propConfig.maxReflections = sdf->Get<int>("max_reflections");
+    if (sdf->HasElement("max_diffractions"))
+        propConfig.maxDiffractions = sdf->Get<int>("max_diffractions");
 
+    // Initialize propagation model
+    propModel = PropagationModelFactory::Create(propConfig.model);
+
+    // Initialize pixel buffer
     pixels.assign(gridW * gridH, -200.0f);
-    heatmapPub = node.Advertise<msgs::Image>("/gnb/heatmap");
 
-    ignmsg << "HeatmapPlugin configured:\n"
-           << "  Grid: " << gridW << "x" << gridH << "\n"
-           << "  Cell size: " << cellSize << " m\n"
-           << "  Coverage area: " << (gridW * cellSize) << "x" << (gridH * cellSize) << " m\n"
-           << "  Frequency: " << freqHz / 1e9 << " GHz\n"
-           << "  Tx power: " << ptxDbm << " dBm\n"
-           << "  Wall loss: " << wallLossDb << " dB per wall\n"
-           << "  gNB position: " << gnbPos << "\n";
+    // Setup publishers
+    heatmapPub = node.Advertise<msgs::Image>("/gnb/heatmap");
+    statusPub = node.Advertise<msgs::StringMsg>("/gnb/heatmap/status");
+
+    // Setup subscribers for runtime configuration
+    node.Subscribe("/gnb/heatmap/set_model", &HeatmapPlugin::OnModelChangeRequest, this);
+    node.Subscribe("/gnb/heatmap/config", &HeatmapPlugin::OnConfigUpdate, this);
+
+    ignmsg << "=== HeatmapPlugin Configuration ===" << std::endl;
+    ignmsg << "  Grid: " << gridW << "x" << gridH << " (" << (gridW * cellSize) << "x" << (gridH * cellSize) << " m)" << std::endl;
+    ignmsg << "  Frequency: " << propConfig.frequencyHz / 1e9 << " GHz" << std::endl;
+    ignmsg << "  Tx Power: " << propConfig.txPowerDbm << " dBm" << std::endl;
+    ignmsg << "  Tx Height: " << propConfig.txHeightM << " m" << std::endl;
+    ignmsg << "  Rx Height: " << propConfig.rxHeightM << " m" << std::endl;
+    ignmsg << "  Propagation Model: " << propModel->GetName() << std::endl;
+    ignmsg << "  Wall Penetration Loss: " << propConfig.defaultMaterial.penetrationLoss_dB << " dB" << std::endl;
+    ignmsg << "  Shadowing: " << (propConfig.includeShadowing ? "enabled" : "disabled") << std::endl;
+    ignmsg << "===============================" << std::endl;
+    ignmsg << "Runtime control topics:" << std::endl;
+    ignmsg << "  /gnb/heatmap/set_model - Change propagation model" << std::endl;
+    ignmsg << "  /gnb/heatmap/config - Update configuration" << std::endl;
+    ignmsg << "  /gnb/heatmap/status - Current status (published)" << std::endl;
 
     // Initial obstacle scan
     UpdateObstacles(_ecm);
 
     running = true;
     worker = std::thread(&HeatmapPlugin::WorkerLoop, this);
+}
+
+void HeatmapPlugin::OnModelChangeRequest(const msgs::StringMsg &_msg)
+{
+    std::string modelName = _msg.data();
+    PropagationModel newModel = propConfig.model;
+    
+    if (modelName == "free_space" || modelName == "fspl")
+        newModel = PropagationModel::FREE_SPACE;
+    else if (modelName == "3gpp_umi" || modelName == "umi")
+        newModel = PropagationModel::THREE_GPP_UMI;
+    else if (modelName == "3gpp_uma" || modelName == "uma")
+        newModel = PropagationModel::THREE_GPP_UMA;
+    else if (modelName == "ray_tracing" || modelName == "raytracing")
+        newModel = PropagationModel::RAY_TRACING;
+    else if (modelName == "hybrid")
+        newModel = PropagationModel::HYBRID;
+    else
+    {
+        ignwarn << "Unknown propagation model: " << modelName << std::endl;
+        ignwarn << "Available: free_space, 3gpp_umi, 3gpp_uma, ray_tracing, hybrid" << std::endl;
+        return;
+    }
+    
+    {
+        std::lock_guard<std::mutex> lock(modelMutex);
+        propConfig.model = newModel;
+        propModel = PropagationModelFactory::Create(newModel);
+    }
+    
+    needsRecalculation = true;
+    ignmsg << "Propagation model changed to: " << propModel->GetName() << std::endl;
+}
+
+void HeatmapPlugin::OnConfigUpdate(const msgs::StringMsg &_msg)
+{
+    // Parse simple key=value format
+    std::istringstream iss(_msg.data());
+    std::string token;
+    
+    std::lock_guard<std::mutex> lock(modelMutex);
+    
+    while (std::getline(iss, token, ';'))
+    {
+        auto pos = token.find('=');
+        if (pos == std::string::npos) continue;
+        
+        std::string key = token.substr(0, pos);
+        std::string value = token.substr(pos + 1);
+        
+        try
+        {
+            if (key == "tx_power")
+                propConfig.txPowerDbm = std::stod(value);
+            else if (key == "frequency")
+                propConfig.frequencyHz = std::stod(value);
+            else if (key == "tx_height")
+                propConfig.txHeightM = std::stod(value);
+            else if (key == "rx_height")
+                propConfig.rxHeightM = std::stod(value);
+            else if (key == "wall_loss")
+                propConfig.defaultMaterial.penetrationLoss_dB = std::stod(value);
+            else if (key == "reflection_coeff")
+                propConfig.defaultMaterial.reflectionCoeff = std::stod(value);
+            else if (key == "shadowing")
+                propConfig.includeShadowing = (value == "true" || value == "1");
+            else if (key == "max_reflections")
+                propConfig.maxReflections = std::stoi(value);
+            
+            ignmsg << "Config updated: " << key << " = " << value << std::endl;
+        }
+        catch (const std::exception& e)
+        {
+            ignwarn << "Failed to parse config " << key << ": " << e.what() << std::endl;
+        }
+    }
+    
+    needsRecalculation = true;
+}
+
+void HeatmapPlugin::PublishStatus()
+{
+    std::ostringstream oss;
+    oss << "model=" << propModel->GetName() << ";"
+        << "frequency=" << propConfig.frequencyHz << ";"
+        << "tx_power=" << propConfig.txPowerDbm << ";"
+        << "tx_height=" << propConfig.txHeightM << ";"
+        << "rx_height=" << propConfig.rxHeightM << ";"
+        << "wall_loss=" << propConfig.defaultMaterial.penetrationLoss_dB << ";"
+        << "obstacles=" << obstacles.size() << ";"
+        << "shadowing=" << (propConfig.includeShadowing ? "true" : "false");
+    
+    msgs::StringMsg msg;
+    msg.set_data(oss.str());
+    statusPub.Publish(msg);
 }
 
 void HeatmapPlugin::PreUpdate(
@@ -82,23 +244,29 @@ void HeatmapPlugin::PreUpdate(
     if (_info.paused)
         return;
 
-    // Update obstacles every frame to catch new/moved buildings
-    static uint64_t lastObstacleUpdate = 0;
     uint64_t currentIter = _info.iterations;
     
-    // Update obstacles every 50 iterations (~50ms at 1000Hz)
+    // Update obstacles periodically
+    static uint64_t lastObstacleUpdate = 0;
     if (currentIter - lastObstacleUpdate >= 50)
     {
         UpdateObstacles(_ecm);
         lastObstacleUpdate = currentIter;
     }
 
-    // Publish heatmap at reduced rate
+    // Publish heatmap
     static uint64_t lastPublish = 0;
     if (currentIter - lastPublish >= 10)
     {
         PublishHeatmap();
         lastPublish = currentIter;
+    }
+    
+    // Publish status periodically
+    if (currentIter - lastStatusPublish >= 100)
+    {
+        PublishStatus();
+        lastStatusPublish = currentIter;
     }
 }
 
@@ -106,7 +274,6 @@ void HeatmapPlugin::UpdateObstacles(EntityComponentManager &_ecm)
 {
     std::vector<Obstacle> newObstacles;
 
-    // Iterate through all models
     _ecm.Each<components::Model, components::Name, components::Pose>(
         [&](const Entity &modelEntity,
             const components::Model *,
@@ -114,40 +281,30 @@ void HeatmapPlugin::UpdateObstacles(EntityComponentManager &_ecm)
             const components::Pose *poseComp) -> bool
         {
             std::string modelName = nameComp->Data();
-            
-            // Skip ground plane and gNB tower
             std::string lowerName = modelName;
             std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
             
             if (lowerName.find("ground") != std::string::npos ||
                 lowerName.find("gnb") != std::string::npos ||
                 lowerName.find("sun") != std::string::npos)
-            {
-                return true;  // Continue iteration
-            }
+                return true;
 
-            // Check if model is static (optional - you might want dynamic obstacles too)
-            auto staticComp = _ecm.Component<components::Static>(modelEntity);
-            
             math::Pose3d modelPose = poseComp->Data();
 
-            // Find all links in this model
             _ecm.Each<components::Link, components::ParentEntity, components::Pose>(
                 [&](const Entity &linkEntity,
                     const components::Link *,
                     const components::ParentEntity *parentComp,
                     const components::Pose *linkPoseComp) -> bool
                 {
-                    // Check if this link belongs to our model
                     if (parentComp->Data() != modelEntity)
                         return true;
 
                     math::Pose3d linkPose = linkPoseComp->Data();
 
-                    // Find collisions in this link
                     _ecm.Each<components::Collision, components::ParentEntity, 
                              components::Geometry, components::Pose>(
-                        [&](const Entity &/*collEntity*/,
+                        [&](const Entity &,
                             const components::Collision *,
                             const components::ParentEntity *collParentComp,
                             const components::Geometry *geomComp,
@@ -158,66 +315,52 @@ void HeatmapPlugin::UpdateObstacles(EntityComponentManager &_ecm)
 
                             const sdf::Geometry &geom = geomComp->Data();
                             math::Pose3d collPose = collPoseComp->Data();
-
-                            // Calculate world pose
                             math::Pose3d worldPose = modelPose * linkPose * collPose;
 
                             Obstacle obs;
                             obs.name = modelName;
                             obs.position = worldPose.Pos();
+                            obs.material = propConfig.defaultMaterial;
 
-                            bool validObstacle = false;
-
+                            bool valid = false;
                             if (geom.Type() == sdf::GeometryType::BOX && geom.BoxShape())
                             {
                                 obs.size = geom.BoxShape()->Size();
-                                validObstacle = true;
+                                valid = true;
                             }
                             else if (geom.Type() == sdf::GeometryType::CYLINDER && geom.CylinderShape())
                             {
-                                // Approximate cylinder as box
                                 double r = geom.CylinderShape()->Radius();
                                 double h = geom.CylinderShape()->Length();
                                 obs.size = math::Vector3d(r * 2, r * 2, h);
-                                validObstacle = true;
+                                valid = true;
                             }
 
-                            if (validObstacle)
+                            if (valid)
                             {
-                                // Create AABB (axis-aligned, ignoring rotation for simplicity)
-                                // For rotated boxes, you'd need OBB intersection
                                 math::Vector3d halfSize = obs.size / 2.0;
                                 obs.bbox = math::AxisAlignedBox(
                                     obs.position - halfSize,
-                                    obs.position + halfSize
-                                );
-                                
+                                    obs.position + halfSize);
                                 newObstacles.push_back(obs);
                             }
-
                             return true;
                         });
-
                     return true;
                 });
-
             return true;
         });
 
-    // Check if obstacles changed
     bool changed = false;
     {
         std::lock_guard<std::mutex> lock(obstacleMutex);
         if (newObstacles.size() != obstacles.size())
-        {
             changed = true;
-        }
         else
         {
             for (size_t i = 0; i < newObstacles.size(); ++i)
             {
-                if (newObstacles[i].position.Distance(obstacles[i].position) > 0.01 ||
-                    newObstacles[i].size.Distance(obstacles[i].size) > 0.01)
+                if (newObstacles[i].position.Distance(obstacles[i].position) > 0.01)
                 {
                     changed = true;
                     break;
@@ -229,128 +372,15 @@ void HeatmapPlugin::UpdateObstacles(EntityComponentManager &_ecm)
         {
             obstacles = std::move(newObstacles);
             needsRecalculation = true;
-            
-            ignmsg << "Obstacles updated: " << obstacles.size() << " found" << std::endl;
-            for (const auto &obs : obstacles)
-            {
-                ignmsg << "  - " << obs.name << " at " << obs.position 
-                       << " size " << obs.size << std::endl;
-            }
+            igndbg << "Obstacles updated: " << obstacles.size() << " found" << std::endl;
         }
     }
-}
-
-bool HeatmapPlugin::RayIntersectsAABB(
-    const math::Vector3d &rayOrigin,
-    const math::Vector3d &rayDir,
-    double rayLength,
-    const math::AxisAlignedBox &box)
-{
-    double tmin = 0.0;
-    double tmax = rayLength;
-
-    for (int i = 0; i < 3; ++i)
-    {
-        double origin, dir, bmin, bmax;
-        
-        switch (i)
-        {
-            case 0:
-                origin = rayOrigin.X();
-                dir = rayDir.X();
-                bmin = box.Min().X();
-                bmax = box.Max().X();
-                break;
-            case 1:
-                origin = rayOrigin.Y();
-                dir = rayDir.Y();
-                bmin = box.Min().Y();
-                bmax = box.Max().Y();
-                break;
-            default:
-                origin = rayOrigin.Z();
-                dir = rayDir.Z();
-                bmin = box.Min().Z();
-                bmax = box.Max().Z();
-                break;
-        }
-
-        if (std::abs(dir) < 1e-8)
-        {
-            if (origin < bmin || origin > bmax)
-                return false;
-        }
-        else
-        {
-            double invDir = 1.0 / dir;
-            double t1 = (bmin - origin) * invDir;
-            double t2 = (bmax - origin) * invDir;
-
-            if (t1 > t2)
-                std::swap(t1, t2);
-
-            tmin = std::max(tmin, t1);
-            tmax = std::min(tmax, t2);
-
-            if (tmin > tmax)
-                return false;
-        }
-    }
-
-    return tmin <= tmax && tmax > 0;
-}
-
-int HeatmapPlugin::CountOcclusions(
-    const math::Vector3d &from,
-    const math::Vector3d &to) const
-{
-    math::Vector3d dir = to - from;
-    double length = dir.Length();
-    
-    if (length < 0.01)
-        return 0;
-    
-    dir /= length;  // Normalize
-
-    int count = 0;
-    
-    std::lock_guard<std::mutex> lock(obstacleMutex);
-    for (const auto &obs : obstacles)
-    {
-        if (RayIntersectsAABB(from, dir, length, obs.bbox))
-        {
-            ++count;
-        }
-    }
-
-    return count;
-}
-
-bool HeatmapPlugin::IsInsideObstacle(const math::Vector3d &point) const
-{
-    std::lock_guard<std::mutex> lock(obstacleMutex);
-    for (const auto &obs : obstacles)
-    {
-        if (obs.bbox.Contains(point))
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
-double HeatmapPlugin::FSPL_dB(double d, double f)
-{
-    if (d < 0.1)
-        d = 0.1;
-    return 20.0 * std::log10(d) + 20.0 * std::log10(f) - 147.55;
 }
 
 void HeatmapPlugin::WorkerLoop()
 {
     while (running)
     {
-        // Only recalculate if needed
         if (!needsRecalculation)
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -361,16 +391,23 @@ void HeatmapPlugin::WorkerLoop()
 
         double halfW = (gridW * cellSize) / 2.0;
         double halfH = (gridH * cellSize) / 2.0;
-        double sampleZ = gnbPos.Z();
 
         std::vector<float> newPixels(gridW * gridH);
 
-        // Copy obstacles for thread safety
+        // Copy data for thread safety
         std::vector<Obstacle> localObstacles;
+        PropagationConfig localConfig;
+        std::unique_ptr<IPropagationModel> localModel;
+        
         {
-            std::lock_guard<std::mutex> lock(obstacleMutex);
+            std::lock_guard<std::mutex> lock1(obstacleMutex);
+            std::lock_guard<std::mutex> lock2(modelMutex);
             localObstacles = obstacles;
+            localConfig = propConfig;
+            localModel = PropagationModelFactory::Create(localConfig.model);
         }
+
+        ignition::math::Vector3d txPos = gnbPos;
 
         for (int y = 0; y < gridH && running; ++y)
         {
@@ -381,49 +418,12 @@ void HeatmapPlugin::WorkerLoop()
                 double worldX = gnbPos.X() - halfW + nx * (2.0 * halfW);
                 double worldY = gnbPos.Y() - halfH + ny * (2.0 * halfH);
 
-                math::Vector3d samplePos(worldX, worldY, sampleZ);
-                double d = samplePos.Distance(gnbPos);
+                math::Vector3d rxPos(worldX, worldY, localConfig.rxHeightM);
 
-                // Check if inside an obstacle
-                bool insideObstacle = false;
-                for (const auto &obs : localObstacles)
-                {
-                    if (obs.bbox.Contains(samplePos))
-                    {
-                        insideObstacle = true;
-                        break;
-                    }
-                }
+                double rxPower = localModel->CalculateReceivedPower(
+                    txPos, rxPos, localObstacles, localConfig);
 
-                double prDbm;
-                if (insideObstacle)
-                {
-                    prDbm = -150.0;  // No signal inside buildings
-                }
-                else
-                {
-                    // Compute FSPL
-                    prDbm = ptxDbm - FSPL_dB(d, freqHz);
-
-                    // Count wall penetrations and apply loss
-                    math::Vector3d dir = samplePos - gnbPos;
-                    double length = dir.Length();
-                    if (length > 0.01)
-                    {
-                        dir /= length;
-                        
-                        for (const auto &obs : localObstacles)
-                        {
-                            if (RayIntersectsAABB(gnbPos, dir, length, obs.bbox))
-                            {
-                                prDbm -= wallLossDb;
-                            }
-                        }
-                    }
-                }
-
-                prDbm = std::clamp(prDbm, -120.0, ptxDbm);
-                newPixels[y * gridW + x] = static_cast<float>(prDbm);
+                newPixels[y * gridW + x] = static_cast<float>(rxPower);
             }
         }
 
@@ -432,7 +432,7 @@ void HeatmapPlugin::WorkerLoop()
             pixels = std::move(newPixels);
         }
 
-        igndbg << "Heatmap recalculated with " << localObstacles.size() << " obstacles" << std::endl;
+        igndbg << "Heatmap recalculated using " << localModel->GetName() << std::endl;
     }
 }
 
@@ -453,7 +453,6 @@ void HeatmapPlugin::PublishHeatmap()
         {
             float dbm = pixels[i];
             
-            // Inside buildings - dark gray
             if (dbm <= -140.0f)
             {
                 rgbData[i * 3 + 0] = 50;
@@ -462,39 +461,29 @@ void HeatmapPlugin::PublishHeatmap()
                 continue;
             }
             
-            // Map dBm to [0,1]: -120dBm -> 0, -30dBm -> 1
             float normalized = (dbm + 120.0f) / 90.0f;
             normalized = std::clamp(normalized, 0.0f, 1.0f);
 
-            // Color gradient: blue -> cyan -> green -> yellow -> red
             uint8_t r, g, b;
             if (normalized < 0.25f)
             {
                 float t = normalized / 0.25f;
-                r = 0;
-                g = static_cast<uint8_t>(255 * t);
-                b = 255;
+                r = 0; g = static_cast<uint8_t>(255 * t); b = 255;
             }
             else if (normalized < 0.5f)
             {
                 float t = (normalized - 0.25f) / 0.25f;
-                r = 0;
-                g = 255;
-                b = static_cast<uint8_t>(255 * (1 - t));
+                r = 0; g = 255; b = static_cast<uint8_t>(255 * (1 - t));
             }
             else if (normalized < 0.75f)
             {
                 float t = (normalized - 0.5f) / 0.25f;
-                r = static_cast<uint8_t>(255 * t);
-                g = 255;
-                b = 0;
+                r = static_cast<uint8_t>(255 * t); g = 255; b = 0;
             }
             else
             {
                 float t = (normalized - 0.75f) / 0.25f;
-                r = 255;
-                g = static_cast<uint8_t>(255 * (1 - t));
-                b = 0;
+                r = 255; g = static_cast<uint8_t>(255 * (1 - t)); b = 0;
             }
 
             rgbData[i * 3 + 0] = r;

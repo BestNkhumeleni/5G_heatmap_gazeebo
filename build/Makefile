@@ -198,6 +198,30 @@ src/HeatmapPlugin.cc.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/HeatmapPlugin.dir/build.make CMakeFiles/HeatmapPlugin.dir/src/HeatmapPlugin.cc.s
 .PHONY : src/HeatmapPlugin.cc.s
 
+src/PropagationModels.o: src/PropagationModels.cc.o
+.PHONY : src/PropagationModels.o
+
+# target to build an object file
+src/PropagationModels.cc.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/HeatmapPlugin.dir/build.make CMakeFiles/HeatmapPlugin.dir/src/PropagationModels.cc.o
+.PHONY : src/PropagationModels.cc.o
+
+src/PropagationModels.i: src/PropagationModels.cc.i
+.PHONY : src/PropagationModels.i
+
+# target to preprocess a source file
+src/PropagationModels.cc.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/HeatmapPlugin.dir/build.make CMakeFiles/HeatmapPlugin.dir/src/PropagationModels.cc.i
+.PHONY : src/PropagationModels.cc.i
+
+src/PropagationModels.s: src/PropagationModels.cc.s
+.PHONY : src/PropagationModels.s
+
+# target to generate assembly for a file
+src/PropagationModels.cc.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/HeatmapPlugin.dir/build.make CMakeFiles/HeatmapPlugin.dir/src/PropagationModels.cc.s
+.PHONY : src/PropagationModels.cc.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -214,6 +238,9 @@ help:
 	@echo "... src/HeatmapPlugin.o"
 	@echo "... src/HeatmapPlugin.i"
 	@echo "... src/HeatmapPlugin.s"
+	@echo "... src/PropagationModels.o"
+	@echo "... src/PropagationModels.i"
+	@echo "... src/PropagationModels.s"
 .PHONY : help
 
 

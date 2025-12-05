@@ -21,5 +21,16 @@ make -j
 ## how to run
 ign gazebo worlds/heatmap_world.sdf --gui-config gui.config
 
-# optionally: sudo make install (or copy .so to ~/.ignition/gazebo/plugins or a GAZEBO_PLUGIN_PATH)
+#How to change the propagation model being using during runtime
 
+# Change to ray tracing model
+ign topic -t /gnb/heatmap/set_model -m ignition.msgs.StringMsg -p 'data: "ray_tracing"'
+
+# Change to 3GPP UMi
+ign topic -t /gnb/heatmap/set_model -m ignition.msgs.StringMsg -p 'data: "3gpp_umi"'
+
+# Update configuration
+ign topic -t /gnb/heatmap/config -m ignition.msgs.StringMsg -p 'data: "tx_power=40;wall_loss=20"'
+
+# Check current status
+ign topic -e -t /gnb/heatmap/status -n 1
