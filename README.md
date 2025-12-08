@@ -16,7 +16,7 @@ A starter rendering plugin for Ignition Gazebo 6 that computes a 2D ground-plane
 ```bash
 mkdir build && cd build
 cmake ..
-make -j
+make
 
 ## how to run
 ign gazebo worlds/heatmap_world.sdf --gui-config gui.config
@@ -35,12 +35,36 @@ ign topic -t /gnb/heatmap/set_model -m ignition.msgs.StringMsg -p 'data: "3gpp_u
 # Update configuration
 ign topic -t /gnb/heatmap/config -m ignition.msgs.StringMsg -p 'data: "tx_power=40;wall_loss=20"'
 
-##Or use the scipt:
-chmod +x scripts/heatmap_control.sh
-./scripts/heatmap_control.sh model ray_tracing
-./scripts/heatmap_control.sh power 40
-./scripts/heatmap_control.sh status
+##Or use the scipt (run from inside the scripts directory):
+chmod +x heatmap_control.sh
+./heatmap_control.sh model ray_tracing
+./heatmap_control.sh power 40
+./heatmap_control.sh status
 
+# Move gNB to new position
+./heatmap_control.sh move 5 10 12
+
+# Query signal at a point
+./heatmap_control.sh query 15 20 1.5
+
+# Listen for click events
+./heatmap_control.sh listen_clicks
 
 # Check current status
 ign topic -e -t /gnb/heatmap/status -n 1
+
+# Zoom in 3 steps
+./heatmap_control.sh zoom_in 3
+
+# Pan 20 meters to the right
+./heatmap_control.sh pan 20 0
+
+# Jump to position (100, 50) at 4x zoom
+./heatmap_control.sh goto 100 50 4
+
+# Center on gNB and zoom in
+./heatmap_control.sh center
+./heatmap_control.sh zoom_in 4
+
+# Interactive keyboard mode
+./heatmap_control.sh interactive

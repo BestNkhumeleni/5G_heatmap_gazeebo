@@ -16,7 +16,6 @@
 namespace heatmap_plugin
 {
 
-/// Represents a building/obstacle that blocks RF signals
 struct Obstacle
 {
     std::string name;
@@ -26,8 +25,30 @@ struct Obstacle
     MaterialProperties material;
 };
 
-/// A Gazebo system plugin that computes a 2D RF signal-strength heatmap
-/// with multiple propagation model support and interactive features.
+/// View state for pan and zoom
+struct ViewState
+{
+    double centerX{0.0};      // View center X in world coordinates
+    double centerY{0.0};      // View center Y in world coordinates
+    double zoomLevel{1.0};    // 1.0 = default, 2.0 = 2x zoom in, 0.5 = zoom out
+    double minZoom{0.25};     // Maximum zoom out (4x world size)
+    double maxZoom{8.0};      // Maximum zoom in (1/8 world size)
+    
+    // Base world extents (at zoom=1.0)
+    double baseWorldWidth{64.0};
+    double baseWorldHeight{64.0};
+    
+    // Get current visible world extents
+    double GetVisibleWidth() const { return baseWorldWidth / zoomLevel; }
+    double GetVisibleHeight() const { return baseWorldHeight / zoomLevel; }
+    
+    // Get world bounds
+    double GetMinX() const { return centerX - GetVisibleWidth() / 2.0; }
+    double GetMaxX() const { return centerX + GetVisibleWidth() / 2.0; }
+    double GetMinY() const { return centerY - GetVisibleHeight() / 2.0; }
+    double GetMaxY() const { return centerY + GetVisibleHeight() / 2.0; }
+};
+
 class HeatmapPlugin
     : public ignition::gazebo::System,
       public ignition::gazebo::ISystemConfigure,
@@ -48,32 +69,23 @@ public:
         ignition::gazebo::EntityComponentManager &_ecm) override;
 
 private:
-    /// Background thread function that computes the heatmap
     void WorkerLoop();
-
-    /// Publish the current heatmap buffer as an Image message
     void PublishHeatmap();
-
-    /// Update obstacle list from the ECM
     void UpdateObstacles(ignition::gazebo::EntityComponentManager &_ecm);
-
-    /// Handle model change requests
     void OnModelChangeRequest(const ignition::msgs::StringMsg &_msg);
-
-    /// Handle config update requests
     void OnConfigUpdate(const ignition::msgs::StringMsg &_msg);
-
-    /// Handle mouse click events for signal strength queries
     void OnMouseClick(const ignition::msgs::Vector3d &_msg);
-
-    /// Handle gNB position change requests
     void OnGnbPoseChange(const ignition::msgs::Pose &_msg);
-
-    /// Query signal strength at a specific position
     void QuerySignalAtPosition(const ignition::math::Vector3d &_pos);
-
-    /// Publish current configuration status
     void PublishStatus();
+
+    // View control handlers
+    void OnZoom(const ignition::msgs::Double &_msg);
+    void OnPan(const ignition::msgs::Vector2d &_msg);
+    void OnSetView(const ignition::msgs::Pose &_msg);
+    void OnResetView(const ignition::msgs::Empty &_msg);
+    void OnCenterOnGnb(const ignition::msgs::Empty &_msg);
+    void PublishViewInfo();
 
     // Transport
     ignition::transport::Node node;
@@ -81,14 +93,19 @@ private:
     ignition::transport::Node::Publisher statusPub;
     ignition::transport::Node::Publisher clickInfoPub;
     ignition::transport::Node::Publisher queryResultPub;
+    ignition::transport::Node::Publisher viewInfoPub;
 
-    // Grid parameters
-    int gridW{128};
-    int gridH{128};
-    double cellSize{0.5};
+    // Grid parameters (output resolution)
+    int gridW{256};
+    int gridH{256};
+    double cellSize{0.5};  // Only used for base world size calculation
 
     // gNB position
     ignition::math::Vector3d gnbPos{0, 0, 10.0};
+
+    // View state
+    ViewState viewState;
+    mutable std::mutex viewMutex;
 
     // Propagation configuration
     PropagationConfig propConfig;
@@ -110,6 +127,7 @@ private:
     
     // Status publishing
     uint64_t lastStatusPublish{0};
+    uint64_t lastViewInfoPublish{0};
     
     // Interactive features
     bool enableClickQuery{true};

@@ -14,6 +14,9 @@
 #include <ignition/msgs/image.pb.h>
 #include <ignition/msgs/stringmsg.pb.h>
 #include <ignition/msgs/vector3d.pb.h>
+#include <ignition/msgs/vector2d.pb.h>
+#include <ignition/msgs/double.pb.h>
+#include <ignition/msgs/empty.pb.h>
 #include <ignition/msgs/pose.pb.h>
 #include <ignition/common/Console.hh>
 #include <sdf/Geometry.hh>
@@ -42,13 +45,33 @@ void HeatmapPlugin::Configure(
 {
     auto sdf = const_cast<sdf::Element*>(_sdf.get());
     
-    // Grid parameters
+    // Grid parameters (output resolution)
     if (sdf->HasElement("grid_w"))
         gridW = sdf->Get<int>("grid_w");
     if (sdf->HasElement("grid_h"))
         gridH = sdf->Get<int>("grid_h");
     if (sdf->HasElement("cell_size"))
         cellSize = sdf->Get<double>("cell_size");
+    
+    // Calculate base world extents from grid size and cell size
+    viewState.baseWorldWidth = gridW * cellSize;
+    viewState.baseWorldHeight = gridH * cellSize;
+    
+    // View parameters
+    if (sdf->HasElement("view_center_x"))
+        viewState.centerX = sdf->Get<double>("view_center_x");
+    if (sdf->HasElement("view_center_y"))
+        viewState.centerY = sdf->Get<double>("view_center_y");
+    if (sdf->HasElement("initial_zoom"))
+        viewState.zoomLevel = sdf->Get<double>("initial_zoom");
+    if (sdf->HasElement("min_zoom"))
+        viewState.minZoom = sdf->Get<double>("min_zoom");
+    if (sdf->HasElement("max_zoom"))
+        viewState.maxZoom = sdf->Get<double>("max_zoom");
+    if (sdf->HasElement("world_width"))
+        viewState.baseWorldWidth = sdf->Get<double>("world_width");
+    if (sdf->HasElement("world_height"))
+        viewState.baseWorldHeight = sdf->Get<double>("world_height");
     
     // RF parameters
     if (sdf->HasElement("frequency_hz"))
@@ -123,37 +146,142 @@ void HeatmapPlugin::Configure(
     statusPub = node.Advertise<msgs::StringMsg>("/gnb/heatmap/status");
     clickInfoPub = node.Advertise<msgs::StringMsg>("/gnb/heatmap/click_info");
     queryResultPub = node.Advertise<msgs::StringMsg>("/gnb/heatmap/query_result");
+    viewInfoPub = node.Advertise<msgs::StringMsg>("/gnb/heatmap/view_info");
 
     // Setup subscribers for runtime configuration
     node.Subscribe("/gnb/heatmap/set_model", &HeatmapPlugin::OnModelChangeRequest, this);
     node.Subscribe("/gnb/heatmap/config", &HeatmapPlugin::OnConfigUpdate, this);
     node.Subscribe("/gnb/heatmap/set_position", &HeatmapPlugin::OnGnbPoseChange, this);
     node.Subscribe("/gnb/heatmap/query_position", &HeatmapPlugin::OnMouseClick, this);
+    
+    // View control subscribers
+    node.Subscribe("/gnb/heatmap/zoom", &HeatmapPlugin::OnZoom, this);
+    node.Subscribe("/gnb/heatmap/pan", &HeatmapPlugin::OnPan, this);
+    node.Subscribe("/gnb/heatmap/set_view", &HeatmapPlugin::OnSetView, this);
+    node.Subscribe("/gnb/heatmap/reset_view", &HeatmapPlugin::OnResetView, this);
+    node.Subscribe("/gnb/heatmap/center_on_gnb", &HeatmapPlugin::OnCenterOnGnb, this);
 
     ignmsg << "=== HeatmapPlugin Configuration ===" << std::endl;
-    ignmsg << "  Grid: " << gridW << "x" << gridH << " (" << (gridW * cellSize) << "x" << (gridH * cellSize) << " m)" << std::endl;
+    ignmsg << "  Output Resolution: " << gridW << "x" << gridH << std::endl;
+    ignmsg << "  Base World Size: " << viewState.baseWorldWidth << "x" 
+           << viewState.baseWorldHeight << " m" << std::endl;
+    ignmsg << "  Initial View Center: (" << viewState.centerX << ", " 
+           << viewState.centerY << ")" << std::endl;
+    ignmsg << "  Zoom Range: " << viewState.minZoom << "x - " 
+           << viewState.maxZoom << "x" << std::endl;
     ignmsg << "  Frequency: " << propConfig.frequencyHz / 1e9 << " GHz" << std::endl;
     ignmsg << "  Tx Power: " << propConfig.txPowerDbm << " dBm" << std::endl;
-    ignmsg << "  Tx Height: " << propConfig.txHeightM << " m" << std::endl;
-    ignmsg << "  Rx Height: " << propConfig.rxHeightM << " m" << std::endl;
     ignmsg << "  Propagation Model: " << propModel->GetName() << std::endl;
-    ignmsg << "  Wall Penetration Loss: " << propConfig.defaultMaterial.penetrationLoss_dB << " dB" << std::endl;
-    ignmsg << "  Shadowing: " << (propConfig.includeShadowing ? "enabled" : "disabled") << std::endl;
-    ignmsg << "  Click Query: " << (enableClickQuery ? "enabled" : "disabled") << std::endl;
     ignmsg << "===============================" << std::endl;
-    ignmsg << "Runtime control topics:" << std::endl;
-    ignmsg << "  /gnb/heatmap/set_model - Change propagation model" << std::endl;
-    ignmsg << "  /gnb/heatmap/config - Update configuration" << std::endl;
-    ignmsg << "  /gnb/heatmap/set_position - Move gNB transmitter" << std::endl;
-    ignmsg << "  /gnb/heatmap/query_position - Query signal at position" << std::endl;
-    ignmsg << "  /gnb/heatmap/status - Current status (published)" << std::endl;
-    ignmsg << "  /gnb/heatmap/click_info - Click query results" << std::endl;
+    ignmsg << "View control topics:" << std::endl;
+    ignmsg << "  /gnb/heatmap/zoom - Zoom in/out (positive=in, negative=out)" << std::endl;
+    ignmsg << "  /gnb/heatmap/pan - Pan view (dx, dy in world units)" << std::endl;
+    ignmsg << "  /gnb/heatmap/set_view - Set view (x, y, zoom in pose msg)" << std::endl;
+    ignmsg << "  /gnb/heatmap/reset_view - Reset to default view" << std::endl;
+    ignmsg << "  /gnb/heatmap/center_on_gnb - Center view on gNB" << std::endl;
+    ignmsg << "  /gnb/heatmap/view_info - Current view info (published)" << std::endl;
 
     // Initial obstacle scan
     UpdateObstacles(_ecm);
 
     running = true;
     worker = std::thread(&HeatmapPlugin::WorkerLoop, this);
+}
+
+void HeatmapPlugin::OnZoom(const msgs::Double &_msg)
+{
+    std::lock_guard<std::mutex> lock(viewMutex);
+    
+    double zoomDelta = _msg.data();
+    double newZoom = viewState.zoomLevel * (1.0 + zoomDelta * 0.1);
+    viewState.zoomLevel = std::clamp(newZoom, viewState.minZoom, viewState.maxZoom);
+    
+    needsRecalculation = true;
+    ignmsg << "Zoom level: " << viewState.zoomLevel << "x (visible area: " 
+           << viewState.GetVisibleWidth() << "x" << viewState.GetVisibleHeight() 
+           << " m)" << std::endl;
+}
+
+void HeatmapPlugin::OnPan(const msgs::Vector2d &_msg)
+{
+    std::lock_guard<std::mutex> lock(viewMutex);
+    
+    // Pan in world coordinates (scaled by zoom for consistent feel)
+    double panScale = 1.0 / viewState.zoomLevel;
+    viewState.centerX += _msg.x() * panScale;
+    viewState.centerY += _msg.y() * panScale;
+    
+    needsRecalculation = true;
+    ignmsg << "View center: (" << viewState.centerX << ", " << viewState.centerY 
+           << ")" << std::endl;
+}
+
+void HeatmapPlugin::OnSetView(const msgs::Pose &_msg)
+{
+    std::lock_guard<std::mutex> lock(viewMutex);
+    
+    viewState.centerX = _msg.position().x();
+    viewState.centerY = _msg.position().y();
+    
+    // Use z for zoom level if provided and positive
+    if (_msg.position().z() > 0)
+    {
+        viewState.zoomLevel = std::clamp(_msg.position().z(), 
+                                          viewState.minZoom, viewState.maxZoom);
+    }
+    
+    needsRecalculation = true;
+    ignmsg << "View set to: center=(" << viewState.centerX << ", " 
+           << viewState.centerY << "), zoom=" << viewState.zoomLevel << "x" << std::endl;
+}
+
+void HeatmapPlugin::OnResetView(const msgs::Empty &/*_msg*/)
+{
+    std::lock_guard<std::mutex> lock(viewMutex);
+    
+    viewState.centerX = 0.0;
+    viewState.centerY = 0.0;
+    viewState.zoomLevel = 1.0;
+    
+    needsRecalculation = true;
+    ignmsg << "View reset to default" << std::endl;
+}
+
+void HeatmapPlugin::OnCenterOnGnb(const msgs::Empty &/*_msg*/)
+{
+    std::lock_guard<std::mutex> lock(viewMutex);
+    
+    viewState.centerX = gnbPos.X();
+    viewState.centerY = gnbPos.Y();
+    
+    needsRecalculation = true;
+    ignmsg << "View centered on gNB at (" << viewState.centerX << ", " 
+           << viewState.centerY << ")" << std::endl;
+}
+
+void HeatmapPlugin::PublishViewInfo()
+{
+    ViewState localView;
+    {
+        std::lock_guard<std::mutex> lock(viewMutex);
+        localView = viewState;
+    }
+    
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(2);
+    oss << "center_x=" << localView.centerX << ";"
+        << "center_y=" << localView.centerY << ";"
+        << "zoom=" << localView.zoomLevel << ";"
+        << "visible_w=" << localView.GetVisibleWidth() << ";"
+        << "visible_h=" << localView.GetVisibleHeight() << ";"
+        << "min_x=" << localView.GetMinX() << ";"
+        << "max_x=" << localView.GetMaxX() << ";"
+        << "min_y=" << localView.GetMinY() << ";"
+        << "max_y=" << localView.GetMaxY();
+    
+    msgs::StringMsg msg;
+    msg.set_data(oss.str());
+    viewInfoPub.Publish(msg);
 }
 
 void HeatmapPlugin::OnModelChangeRequest(const msgs::StringMsg &_msg)
@@ -174,7 +302,6 @@ void HeatmapPlugin::OnModelChangeRequest(const msgs::StringMsg &_msg)
     else
     {
         ignwarn << "Unknown propagation model: " << modelName << std::endl;
-        ignwarn << "Available: free_space, 3gpp_umi, 3gpp_uma, ray_tracing, hybrid" << std::endl;
         return;
     }
     
@@ -190,7 +317,6 @@ void HeatmapPlugin::OnModelChangeRequest(const msgs::StringMsg &_msg)
 
 void HeatmapPlugin::OnConfigUpdate(const msgs::StringMsg &_msg)
 {
-    // Parse simple key=value format
     std::istringstream iss(_msg.data());
     std::string token;
     
@@ -264,7 +390,6 @@ void HeatmapPlugin::OnMouseClick(const msgs::Vector3d &_msg)
 
 void HeatmapPlugin::QuerySignalAtPosition(const math::Vector3d &_pos)
 {
-    // Copy data for thread safety
     std::vector<Obstacle> localObstacles;
     PropagationConfig localConfig;
     std::unique_ptr<IPropagationModel> localModel;
@@ -279,15 +404,12 @@ void HeatmapPlugin::QuerySignalAtPosition(const math::Vector3d &_pos)
         localGnbPos = gnbPos;
     }
     
-    // Calculate signal strength at queried position
     math::Vector3d queryPos(_pos.X(), _pos.Y(), localConfig.rxHeightM);
     double signalDbm = localModel->CalculateReceivedPower(
         localGnbPos, queryPos, localObstacles, localConfig);
     
-    // Calculate distance
     double distance = localGnbPos.Distance(queryPos);
     
-    // Publish detailed result
     std::ostringstream detailOss;
     detailOss << std::fixed << std::setprecision(2);
     detailOss << "=== Signal Query Result ===" << std::endl;
@@ -296,7 +418,6 @@ void HeatmapPlugin::QuerySignalAtPosition(const math::Vector3d &_pos)
     detailOss << "Signal Strength: " << signalDbm << " dBm" << std::endl;
     detailOss << "Model: " << localModel->GetName() << std::endl;
     
-    // Signal quality interpretation
     if (signalDbm >= -70)
         detailOss << "Quality: Excellent" << std::endl;
     else if (signalDbm >= -85)
@@ -309,11 +430,8 @@ void HeatmapPlugin::QuerySignalAtPosition(const math::Vector3d &_pos)
         detailOss << "Quality: Very Poor/No Service" << std::endl;
     
     std::string detailStr = detailOss.str();
-    
-    // Publish to terminal
     ignmsg << detailStr;
     
-    // Publish to topic for GUI display
     msgs::StringMsg clickMsg;
     std::ostringstream clickOss;
     clickOss << std::fixed << std::setprecision(1);
@@ -323,7 +441,6 @@ void HeatmapPlugin::QuerySignalAtPosition(const math::Vector3d &_pos)
     clickMsg.set_data(clickOss.str());
     clickInfoPub.Publish(clickMsg);
     
-    // Publish detailed result
     msgs::StringMsg resultMsg;
     resultMsg.set_data(detailStr);
     queryResultPub.Publish(resultMsg);
@@ -357,7 +474,6 @@ void HeatmapPlugin::PreUpdate(
 
     uint64_t currentIter = _info.iterations;
     
-    // Update obstacles periodically
     static uint64_t lastObstacleUpdate = 0;
     if (currentIter - lastObstacleUpdate >= 50)
     {
@@ -365,7 +481,6 @@ void HeatmapPlugin::PreUpdate(
         lastObstacleUpdate = currentIter;
     }
 
-    // Publish heatmap
     static uint64_t lastPublish = 0;
     if (currentIter - lastPublish >= 10)
     {
@@ -373,11 +488,16 @@ void HeatmapPlugin::PreUpdate(
         lastPublish = currentIter;
     }
     
-    // Publish status periodically
     if (currentIter - lastStatusPublish >= 100)
     {
         PublishStatus();
         lastStatusPublish = currentIter;
+    }
+    
+    if (currentIter - lastViewInfoPublish >= 50)
+    {
+        PublishViewInfo();
+        lastViewInfoPublish = currentIter;
     }
 }
 
@@ -500,8 +620,20 @@ void HeatmapPlugin::WorkerLoop()
         
         needsRecalculation = false;
 
-        double halfW = (gridW * cellSize) / 2.0;
-        double halfH = (gridH * cellSize) / 2.0;
+        // Get current view state
+        ViewState localView;
+        {
+            std::lock_guard<std::mutex> lock(viewMutex);
+            localView = viewState;
+        }
+
+        // Calculate world bounds for current view
+        double minX = localView.GetMinX();
+        double maxX = localView.GetMaxX();
+        double minY = localView.GetMinY();
+        double maxY = localView.GetMaxY();
+        double visibleWidth = localView.GetVisibleWidth();
+        double visibleHeight = localView.GetVisibleHeight();
 
         std::vector<float> newPixels(gridW * gridH);
 
@@ -509,6 +641,7 @@ void HeatmapPlugin::WorkerLoop()
         std::vector<Obstacle> localObstacles;
         PropagationConfig localConfig;
         std::unique_ptr<IPropagationModel> localModel;
+        ignition::math::Vector3d txPos;
         
         {
             std::lock_guard<std::mutex> lock1(obstacleMutex);
@@ -516,18 +649,19 @@ void HeatmapPlugin::WorkerLoop()
             localObstacles = obstacles;
             localConfig = propConfig;
             localModel = PropagationModelFactory::Create(localConfig.model);
+            txPos = gnbPos;
         }
-
-        ignition::math::Vector3d txPos = gnbPos;
 
         for (int y = 0; y < gridH && running; ++y)
         {
             for (int x = 0; x < gridW; ++x)
             {
+                // Map pixel to world coordinates based on current view
                 double nx = static_cast<double>(x) / (gridW - 1);
                 double ny = static_cast<double>(y) / (gridH - 1);
-                double worldX = gnbPos.X() - halfW + nx * (2.0 * halfW);
-                double worldY = gnbPos.Y() - halfH + ny * (2.0 * halfH);
+                
+                double worldX = minX + nx * visibleWidth;
+                double worldY = minY + ny * visibleHeight;
 
                 math::Vector3d rxPos(worldX, worldY, localConfig.rxHeightM);
 
@@ -543,7 +677,9 @@ void HeatmapPlugin::WorkerLoop()
             pixels = std::move(newPixels);
         }
 
-        igndbg << "Heatmap recalculated using " << localModel->GetName() << std::endl;
+        igndbg << "Heatmap recalculated for view center=(" << localView.centerX 
+               << ", " << localView.centerY << "), zoom=" << localView.zoomLevel 
+               << "x" << std::endl;
     }
 }
 
@@ -557,6 +693,10 @@ void HeatmapPlugin::PublishHeatmap()
 
     std::vector<uint8_t> rgbData(gridW * gridH * 3);
 
+    const float MIN_DBM = -120.0f;
+    const float MAX_DBM = -30.0f;
+    const float RANGE_DBM = MAX_DBM - MIN_DBM;
+
     {
         std::lock_guard<std::mutex> lock(bufMutex);
         
@@ -564,18 +704,19 @@ void HeatmapPlugin::PublishHeatmap()
         {
             float dbm = pixels[i];
             
-            if (dbm <= -140.0f)
+            if (dbm <= MIN_DBM)
             {
-                rgbData[i * 3 + 0] = 50;
-                rgbData[i * 3 + 1] = 50;
+                rgbData[i * 3 + 0] = 30;
+                rgbData[i * 3 + 1] = 30;
                 rgbData[i * 3 + 2] = 50;
                 continue;
             }
             
-            float normalized = (dbm + 120.0f) / 90.0f;
+            float normalized = (dbm - MIN_DBM) / RANGE_DBM;
             normalized = std::clamp(normalized, 0.0f, 1.0f);
 
             uint8_t r, g, b;
+            
             if (normalized < 0.25f)
             {
                 float t = normalized / 0.25f;

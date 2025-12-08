@@ -188,7 +188,7 @@
     
     <!-- Large office building -->
     <model name="building_office">
-      <static>true</static>
+      <static>false</static>
       <pose>15 8 4 0 0 0</pose>
       <link name="link">
         <collision name="collision">
@@ -203,7 +203,7 @@
 
     <!-- Residential tower -->
     <model name="building_residential">
-      <static>true</static>
+      <static>false</static>
       <pose>-12 12 7.5 0 0 0</pose>
       <link name="link">
         <collision name="collision">
@@ -218,7 +218,7 @@
 
     <!-- Shopping center -->
     <model name="building_shopping">
-      <static>true</static>
+      <static>false</static>
       <pose>8 -15 2.5 0 0 0</pose>
       <link name="link">
         <collision name="collision">
@@ -233,7 +233,7 @@
 
     <!-- Small building cluster -->
     <model name="building_small1">
-      <static>true</static>
+      <static>false</static>
       <pose>-18 -10 2 0 0 0</pose>
       <link name="link">
         <collision name="collision">
@@ -247,7 +247,7 @@
     </model>
 
     <model name="building_small2">
-      <static>true</static>
+      <static>false</static>
       <pose>-22 -6 3 0 0 0</pose>
       <link name="link">
         <collision name="collision">
@@ -262,7 +262,7 @@
 
     <!-- Tall narrow building (creates interesting shadow) -->
     <model name="building_tower">
-      <static>true</static>
+      <static>false</static>
       <pose>20 -5 10 0 0 0</pose>
       <link name="link">
         <collision name="collision">
@@ -277,7 +277,7 @@
 
     <!-- L-shaped building -->
     <model name="building_lshaped">
-      <static>true</static>
+      <static>false</static>
       <pose>-8 -20 0 0 0 0</pose>
       <link name="main_wing">
         <pose>0 0 3 0 0 0</pose>
