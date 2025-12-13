@@ -1,0 +1,23 @@
+Best Model Recommendations by Scenario
+==================================================
+
+
+Open Field:
+  Best mean signal: 3GPP UMa (-31.3 dBm)
+  Best coverage:    FSPL (100% good+)
+
+Dense Urban:
+  Best mean signal: Ray Tracing (-47.3 dBm)
+  Best coverage:    FSPL (90% good+)
+
+Street Canyon:
+  Best mean signal: Ray Tracing (-54.6 dBm)
+  Best coverage:    FSPL (80% good+)
+
+Elevated Macro:
+  Best mean signal: Ray Tracing (-30.4 dBm)
+  Best coverage:    FSPL (90% good+)
+
+Indoor-Outdoor:
+  Best mean signal: Ray Tracing (-68.5 dBm)
+  Best coverage:    FSPL (70% good+)

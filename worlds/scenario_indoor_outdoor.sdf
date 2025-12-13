@@ -1,0 +1,176 @@
+<?xml version="1.0" ?>
+<!-- Scenario 5: Indoor-Outdoor / Building Penetration
+     Complex environment with courtyards and building penetration
+     Expected: Wall losses significant, ray tracing valuable for multipath -->
+<sdf version="1.8">
+  <world name="scenario_indoor_outdoor">
+    
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="ignition-gazebo-physics-system"
+            name="ignition::gazebo::systems::Physics"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="ignition::gazebo::systems::SceneBroadcaster"/>
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="ignition::gazebo::systems::UserCommands"/>
+
+    <plugin filename="libHeatmapPlugin.so"
+            name="heatmap_plugin::HeatmapPlugin">
+      <grid_w>128</grid_w>
+      <grid_h>128</grid_h>
+      <cell_size>0.4</cell_size>
+      <frequency_hz>3500000000</frequency_hz>
+      <tx_dbm>30.0</tx_dbm>
+      <tx_height>6.0</tx_height>
+      <rx_height>1.5</rx_height>
+      <tx_gain_dbi>8.0</tx_gain_dbi>
+      <rx_gain_dbi>0.0</rx_gain_dbi>
+      <gnb_pose>-15 0 6 0 0 0</gnb_pose>
+      <propagation_model>3gpp_umi</propagation_model>
+      <wall_loss_db>12.0</wall_loss_db>
+      <reflection_coeff>0.7</reflection_coeff>
+      <include_shadowing>false</include_shadowing>
+      <max_reflections>3</max_reflections>
+    </plugin>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 30 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>150 150</size></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>150 150</size></plane></geometry>
+          <material><ambient>0.6 0.6 0.55 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Outdoor gNB on lamp post -->
+    <model name="gnb_lamppost">
+      <static>true</static>
+      <pose>-15 0 3 0 0 0</pose>
+      <link name="link">
+        <visual name="post">
+          <geometry><cylinder><radius>0.1</radius><length>6</length></cylinder></geometry>
+          <material><ambient>0.3 0.3 0.3 1</ambient></material>
+        </visual>
+        <visual name="antenna">
+          <pose>0 0 3.5 0 0 0</pose>
+          <geometry><box><size>0.25 0.1 0.5</size></box></geometry>
+          <material><ambient>0.8 0.2 0.2 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- U-shaped building with courtyard (tests penetration + diffraction) -->
+    <!-- North wing -->
+    <model name="building_north_wing">
+      <static>true</static>
+      <pose>10 20 5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>30 6 10</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>30 6 10</size></box></geometry>
+          <material><ambient>0.6 0.55 0.5 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <!-- South wing -->
+    <model name="building_south_wing">
+      <static>true</static>
+      <pose>10 -20 5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>30 6 10</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>30 6 10</size></box></geometry>
+          <material><ambient>0.6 0.55 0.5 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <!-- East wing (closes courtyard) -->
+    <model name="building_east_wing">
+      <static>true</static>
+      <pose>22 0 5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>6 34 10</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>6 34 10</size></box></geometry>
+          <material><ambient>0.55 0.55 0.55 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <!-- Interior walls within courtyard building -->
+    <model name="interior_wall_1">
+      <static>true</static>
+      <pose>8 8 2.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.3 10 5</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>0.3 10 5</size></box></geometry>
+          <material><ambient>0.7 0.7 0.65 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="interior_wall_2">
+      <static>true</static>
+      <pose>8 -8 2.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.3 10 5</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>0.3 10 5</size></box></geometry>
+          <material><ambient>0.7 0.7 0.65 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <!-- Separate standalone building (for shadow/NLOS testing) -->
+    <model name="standalone_bldg">
+      <static>true</static>
+      <pose>-5 -25 4 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>10 8 8</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>10 8 8</size></box></geometry>
+          <material><ambient>0.5 0.5 0.55 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <!-- Low wall / fence (partial blockage) -->
+    <model name="low_wall">
+      <static>true</static>
+      <pose>-8 10 1 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>1 20 2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>1 20 2</size></box></geometry>
+          <material><ambient>0.5 0.45 0.4 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <!-- Additional structures for multipath -->
+    <model name="shed_1">
+      <static>true</static>
+      <pose>-25 15 1.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>4 4 3</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>4 4 3</size></box></geometry>
+          <material><ambient>0.55 0.5 0.45 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="shed_2">
+      <static>true</static>
+      <pose>-25 -15 1.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>4 4 3</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>4 4 3</size></box></geometry>
+          <material><ambient>0.55 0.5 0.45 1</ambient></material></visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

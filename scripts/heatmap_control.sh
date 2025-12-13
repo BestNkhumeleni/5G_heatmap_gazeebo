@@ -252,12 +252,38 @@ query_signal() {
     local y=$2
     local z=$3
     echo "Querying signal at position: ($x, $y, $z)"
+    
+    # Start listener in background BEFORE publishing
+    ign topic -e -t $TOPIC_QUERY_RESULT -n 1 2>/dev/null > /tmp/query_result.txt &
+    listener_pid=$!
+    
+    # Small delay to ensure subscriber is ready
+    sleep 0.1
+    
+    # Now publish the query
     ign topic -t $TOPIC_QUERY_POSITION -m ignition.msgs.Vector3d \
         -p "x: $x, y: $y, z: $z"
-    sleep 0.2
+    
+    # Wait for listener to receive (with timeout)
+    local timeout=3
+    local elapsed=0
+    while kill -0 $listener_pid 2>/dev/null && [ $elapsed -lt $timeout ]; do
+        sleep 0.1
+        elapsed=$((elapsed + 1))
+    done
+    
+    # Kill listener if still running (timeout)
+    kill $listener_pid 2>/dev/null
+    wait $listener_pid 2>/dev/null
+    
     echo ""
     echo "Query result:"
-    ign topic -e -t $TOPIC_QUERY_RESULT -n 1 2>/dev/null | grep -oP 'data: "\K[^"]+' | sed 's/\\n/\n/g'
+    if [ -s /tmp/query_result.txt ]; then
+        cat /tmp/query_result.txt | grep -oP 'data: "\K[^"]+' | sed 's/\\n/\n/g'
+    else
+        echo "  No response received (timeout or plugin not running)"
+    fi
+    rm -f /tmp/query_result.txt
 }
 
 listen_clicks() {

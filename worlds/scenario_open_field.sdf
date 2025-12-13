@@ -1,0 +1,101 @@
+<?xml version="1.0" ?>
+<!-- Scenario 1: Open Field / Rural Environment
+     Minimal obstructions - ideal baseline for FSPL validation
+     Expected: All models should converge toward FSPL behavior -->
+<sdf version="1.8">
+  <world name="scenario_open_field">
+    
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="ignition-gazebo-physics-system"
+            name="ignition::gazebo::systems::Physics"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="ignition::gazebo::systems::SceneBroadcaster"/>
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="ignition::gazebo::systems::UserCommands"/>
+
+    <plugin filename="libHeatmapPlugin.so"
+            name="heatmap_plugin::HeatmapPlugin">
+      <grid_w>128</grid_w>
+      <grid_h>128</grid_h>
+      <cell_size>1.0</cell_size>
+      <frequency_hz>3500000000</frequency_hz>
+      <tx_dbm>30.0</tx_dbm>
+      <tx_height>10.0</tx_height>
+      <rx_height>1.5</rx_height>
+      <tx_gain_dbi>8.0</tx_gain_dbi>
+      <rx_gain_dbi>0.0</rx_gain_dbi>
+      <gnb_pose>0 0 10 0 0 0</gnb_pose>
+      <propagation_model>3gpp_umi</propagation_model>
+      <wall_loss_db>15.0</wall_loss_db>
+      <reflection_coeff>0.7</reflection_coeff>
+      <include_shadowing>false</include_shadowing>
+      <max_reflections>2</max_reflections>
+    </plugin>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Large ground plane -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>300 300</size></plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>300 300</size></plane>
+          </geometry>
+          <material>
+            <ambient>0.5 0.6 0.4 1</ambient>
+            <diffuse>0.5 0.6 0.4 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- gNB Tower -->
+    <model name="gnb_tower">
+      <static>true</static>
+      <pose>0 0 5 0 0 0</pose>
+      <link name="tower_link">
+        <visual name="pole">
+          <geometry><cylinder><radius>0.15</radius><length>10</length></cylinder></geometry>
+          <material><ambient>0.4 0.4 0.4 1</ambient></material>
+        </visual>
+        <visual name="antenna">
+          <pose>0 0 5.5 0 0 0</pose>
+          <geometry><box><size>0.4 0.15 0.8</size></box></geometry>
+          <material><ambient>0.8 0.2 0.2 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Single distant small structure (minimal obstruction) -->
+    <model name="distant_shed">
+      <static>true</static>
+      <pose>45 30 1.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>4 3 3</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>4 3 3</size></box></geometry>
+          <material><ambient>0.6 0.5 0.4 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

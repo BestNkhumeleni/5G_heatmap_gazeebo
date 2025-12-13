@@ -1,0 +1,51 @@
+model,model_name,point_desc,x,y,z,signal_dbm,distance_m
+free_space,"Free Space Path Loss","5m LOS",5,0,1.5,-25.21,5.00
+free_space,"Free Space Path Loss","10m LOS",10,0,1.5,-27.69,10.00
+free_space,"Free Space Path Loss","20m LOS",20,0,1.5,-32.07,20.00
+free_space,"Free Space Path Loss","30m LOS",30,0,1.5,-35.21,30.00
+free_space,"Free Space Path Loss","50m LOS",50,0,1.5,-39.43,50.00
+free_space,"Free Space Path Loss","14m diagonal",10,10,1.5,-29.68,14.14
+free_space,"Free Space Path Loss","28m diagonal",20,20,1.5,-34.74,28.28
+free_space,"Free Space Path Loss","18m behind",-10,15,1.5,-31.32,18.02
+free_space,"Free Space Path Loss","29m offset",25,-15,1.5,-34.98,29.15
+free_space,"Free Space Path Loss","50m far diagonal",40,30,1.5,-39.43,50.00
+3gpp_umi,"3GPP TR 38.901 UMi","5m LOS",5,0,1.5,-26.15,5.00
+3gpp_umi,"3GPP TR 38.901 UMi","10m LOS",10,0,1.5,-28.76,10.00
+3gpp_umi,"3GPP TR 38.901 UMi","20m LOS",20,0,1.5,-33.36,20.00
+3gpp_umi,"3GPP TR 38.901 UMi","30m LOS",30,0,1.5,-36.65,30.00
+3gpp_umi,"3GPP TR 38.901 UMi","50m LOS",50,0,1.5,-41.09,50.00
+3gpp_umi,"3GPP TR 38.901 UMi","14m diagonal",10,10,1.5,-30.85,14.14
+3gpp_umi,"3GPP TR 38.901 UMi","28m diagonal",20,20,1.5,-36.16,28.28
+3gpp_umi,"3GPP TR 38.901 UMi","18m behind",-10,15,1.5,-32.57,18.02
+3gpp_umi,"3GPP TR 38.901 UMi","29m offset",25,-15,1.5,-36.41,29.15
+3gpp_umi,"3GPP TR 38.901 UMi","50m far diagonal",40,30,1.5,-41.09,50.00
+3gpp_uma,"3GPP TR 38.901 UMa","5m LOS",5,0,1.5,-22.75,5.00
+3gpp_uma,"3GPP TR 38.901 UMa","10m LOS",10,0,1.5,-25.48,10.00
+3gpp_uma,"3GPP TR 38.901 UMa","20m LOS",20,0,1.5,-30.30,20.00
+3gpp_uma,"3GPP TR 38.901 UMa","30m LOS",30,0,1.5,-33.75,30.00
+3gpp_uma,"3GPP TR 38.901 UMa","50m LOS",50,0,1.5,-38.39,50.00
+3gpp_uma,"3GPP TR 38.901 UMa","14m diagonal",10,10,1.5,-27.67,14.14
+3gpp_uma,"3GPP TR 38.901 UMa","28m diagonal",20,20,1.5,-33.23,28.28
+3gpp_uma,"3GPP TR 38.901 UMa","18m behind",-10,15,1.5,-29.47,18.02
+3gpp_uma,"3GPP TR 38.901 UMa","29m offset",25,-15,1.5,-33.49,29.15
+3gpp_uma,"3GPP TR 38.901 UMa","50m far diagonal",40,30,1.5,-38.39,50.00
+ray_tracing,"Ray Tracing","5m LOS",5,0,1.5,-25.21,5.00
+ray_tracing,"Ray Tracing","10m LOS",10,0,1.5,-27.69,10.00
+ray_tracing,"Ray Tracing","20m LOS",20,0,1.5,-32.07,20.00
+ray_tracing,"Ray Tracing","30m LOS",30,0,1.5,-35.21,30.00
+ray_tracing,"Ray Tracing","50m LOS",50,0,1.5,-39.43,50.00
+ray_tracing,"Ray Tracing","14m diagonal",10,10,1.5,-29.68,14.14
+ray_tracing,"Ray Tracing","28m diagonal",20,20,1.5,-34.74,28.28
+ray_tracing,"Ray Tracing","18m behind",-10,15,1.5,-31.32,18.02
+ray_tracing,"Ray Tracing","29m offset",25,-15,1.5,-34.98,29.15
+ray_tracing,"Ray Tracing","50m far diagonal",40,30,1.5,-39.43,50.00
+hybrid,"Hybrid (3GPP + RT)","5m LOS",5,0,1.5,-26.15,5.00
+hybrid,"Hybrid (3GPP + RT)","10m LOS",10,0,1.5,-28.76,10.00
+hybrid,"Hybrid (3GPP + RT)","20m LOS",20,0,1.5,-33.36,20.00
+hybrid,"Hybrid (3GPP + RT)","30m LOS",30,0,1.5,-36.65,30.00
+hybrid,"Hybrid (3GPP + RT)","50m LOS",50,0,1.5,-41.09,50.00
+hybrid,"Hybrid (3GPP + RT)","14m diagonal",10,10,1.5,-30.85,14.14
+hybrid,"Hybrid (3GPP + RT)","28m diagonal",20,20,1.5,-36.16,28.28
+hybrid,"Hybrid (3GPP + RT)","18m behind",-10,15,1.5,-32.57,18.02
+hybrid,"Hybrid (3GPP + RT)","29m offset",25,-15,1.5,-36.41,29.15
+hybrid,"Hybrid (3GPP + RT)","50m far diagonal",40,30,1.5,-41.09,50.00

@@ -34,7 +34,13 @@ make
 ```
 
 ## how to run
+
 ```bash
+#From the working directory export the plug in path to gazebo:
+
+export IGN_GAZEBO_SYSTEM_PLUGIN_PATH=$(pwd)/build:$IGN_GAZEBO_SYSTEM_PLUGIN_PATH
+
+# and then run this
 ign gazebo worlds/word.sdf --gui-config gui.config
 ```
 
@@ -58,7 +64,7 @@ ign topic -t /gnb/heatmap/set_model -m ignition.msgs.StringMsg -p 'data: "3gpp_u
 ign topic -t /gnb/heatmap/config -m ignition.msgs.StringMsg -p 'data: "tx_power=40;wall_loss=20"'
 ```
 
-##Or use the scipt (run from inside the scripts directory):
+## Using Heatmap control script:
 ```bash
 chmod +x heatmap_control.sh
 ./heatmap_control.sh model ray_tracing
@@ -117,5 +123,40 @@ ign topic -e -t /gnb/heatmap/status -n 1
 ./heatmap_control.sh interactive
 ```
 
+## Running tests on scenarios
 
+```bash
+# Copy scenario files to worlds directory
 
+# Copy scenario files to worlds directory
+cp scenario_*.sdf worlds/
+
+# Make scripts executable
+chmod +x run_comparison.sh
+
+# Run full comparison (headless)
+./run_comparison.sh all
+
+# Run single scenario for testing
+./run_comparison.sh scenario street_canyon
+
+# Generate analysis figures (after data collection)
+pip install pandas matplotlib numpy
+python analyze_results.py comparison_results/<timestamp>
+```
+
+## Output Structure
+```
+comparison_results/
+└── 20241213_HHMMSS/
+    ├── raw_data/
+    │   ├── scenario_open_field.csv
+    │   ├── scenario_open_field_stats.csv
+    │   └── ...
+    ├── figures/
+    │   ├── signal_vs_distance.pdf
+    │   ├── model_comparison_heatmap.pdf
+    │   └── coverage_distribution.pdf
+    ├── comparison_report.txt
+    ├── summary_all_scenarios.csv
+    └── latex_tables.tex

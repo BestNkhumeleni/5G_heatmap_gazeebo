@@ -1,0 +1,201 @@
+<?xml version="1.0" ?>
+<!-- Scenario 3: Street Canyon Environment
+     Long straight street with buildings on both sides
+     Expected: 3GPP UMi model should perform best, reflections important -->
+<sdf version="1.8">
+  <world name="scenario_street_canyon">
+    
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="ignition-gazebo-physics-system"
+            name="ignition::gazebo::systems::Physics"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="ignition::gazebo::systems::SceneBroadcaster"/>
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="ignition::gazebo::systems::UserCommands"/>
+
+    <plugin filename="libHeatmapPlugin.so"
+            name="heatmap_plugin::HeatmapPlugin">
+      <grid_w>128</grid_w>
+      <grid_h>128</grid_h>
+      <cell_size>0.5</cell_size>
+      <frequency_hz>3500000000</frequency_hz>
+      <tx_dbm>30.0</tx_dbm>
+      <tx_height>8.0</tx_height>
+      <rx_height>1.5</rx_height>
+      <tx_gain_dbi>8.0</tx_gain_dbi>
+      <rx_gain_dbi>0.0</rx_gain_dbi>
+      <gnb_pose>0 0 8 0 0 0</gnb_pose>
+      <propagation_model>3gpp_umi</propagation_model>
+      <wall_loss_db>15.0</wall_loss_db>
+      <reflection_coeff>0.75</reflection_coeff>
+      <include_shadowing>false</include_shadowing>
+      <max_reflections>3</max_reflections>
+    </plugin>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 30 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>200 200</size></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>200 200</size></plane></geometry>
+          <material><ambient>0.4 0.4 0.4 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- gNB on street-level pole -->
+    <model name="gnb_pole">
+      <static>true</static>
+      <pose>0 0 4 0 0 0</pose>
+      <link name="link">
+        <visual name="pole">
+          <geometry><cylinder><radius>0.12</radius><length>8</length></cylinder></geometry>
+          <material><ambient>0.3 0.3 0.3 1</ambient></material>
+        </visual>
+        <visual name="antenna">
+          <pose>0 0 4.5 0 0 0</pose>
+          <geometry><box><size>0.3 0.12 0.6</size></box></geometry>
+          <material><ambient>0.8 0.2 0.2 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Main Street (Y-axis) - West side buildings -->
+    <model name="west_bldg_1">
+      <static>true</static>
+      <pose>-12 -40 10 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>8 16 20</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>8 16 20</size></box></geometry>
+          <material><ambient>0.6 0.55 0.5 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="west_bldg_2">
+      <static>true</static>
+      <pose>-12 -20 12.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>8 14 25</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>8 14 25</size></box></geometry>
+          <material><ambient>0.55 0.55 0.55 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="west_bldg_3">
+      <static>true</static>
+      <pose>-12 0 9 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>8 12 18</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>8 12 18</size></box></geometry>
+          <material><ambient>0.5 0.55 0.55 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="west_bldg_4">
+      <static>true</static>
+      <pose>-12 18 11 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>8 14 22</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>8 14 22</size></box></geometry>
+          <material><ambient>0.55 0.5 0.55 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="west_bldg_5">
+      <static>true</static>
+      <pose>-12 38 10 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>8 16 20</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>8 16 20</size></box></geometry>
+          <material><ambient>0.6 0.55 0.55 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <!-- Main Street - East side buildings -->
+    <model name="east_bldg_1">
+      <static>true</static>
+      <pose>12 -38 11 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>8 18 22</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>8 18 22</size></box></geometry>
+          <material><ambient>0.55 0.55 0.6 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="east_bldg_2">
+      <static>true</static>
+      <pose>12 -15 10 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>8 16 20</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>8 16 20</size></box></geometry>
+          <material><ambient>0.5 0.55 0.6 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="east_bldg_3">
+      <static>true</static>
+      <pose>12 8 13 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>8 14 26</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>8 14 26</size></box></geometry>
+          <material><ambient>0.55 0.55 0.55 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="east_bldg_4">
+      <static>true</static>
+      <pose>12 28 9 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>8 12 18</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>8 12 18</size></box></geometry>
+          <material><ambient>0.55 0.5 0.55 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="east_bldg_5">
+      <static>true</static>
+      <pose>12 45 12 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>8 14 24</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>8 14 24</size></box></geometry>
+          <material><ambient>0.6 0.55 0.55 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <!-- Cross street buildings -->
+    <model name="cross_bldg_1">
+      <static>true</static>
+      <pose>-30 -8 8 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>12 8 16</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>12 8 16</size></box></geometry>
+          <material><ambient>0.5 0.5 0.55 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="cross_bldg_2">
+      <static>true</static>
+      <pose>30 -8 10 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>12 8 20</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>12 8 20</size></box></geometry>
+          <material><ambient>0.55 0.5 0.5 1</ambient></material></visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

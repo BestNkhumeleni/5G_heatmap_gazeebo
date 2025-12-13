@@ -1,0 +1,196 @@
+<?xml version="1.0" ?>
+<!-- Scenario 4: Elevated Macro Cell Environment
+     High transmitter above urban clutter
+     Expected: 3GPP UMa model should perform best -->
+<sdf version="1.8">
+  <world name="scenario_elevated_macro">
+    
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="ignition-gazebo-physics-system"
+            name="ignition::gazebo::systems::Physics"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="ignition::gazebo::systems::SceneBroadcaster"/>
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="ignition::gazebo::systems::UserCommands"/>
+
+    <plugin filename="libHeatmapPlugin.so"
+            name="heatmap_plugin::HeatmapPlugin">
+      <grid_w>128</grid_w>
+      <grid_h>128</grid_h>
+      <cell_size>0.75</cell_size>
+      <frequency_hz>3500000000</frequency_hz>
+      <tx_dbm>43.0</tx_dbm>
+      <tx_height>35.0</tx_height>
+      <rx_height>1.5</rx_height>
+      <tx_gain_dbi>15.0</tx_gain_dbi>
+      <rx_gain_dbi>0.0</rx_gain_dbi>
+      <gnb_pose>0 0 35 0 0 0</gnb_pose>
+      <propagation_model>3gpp_uma</propagation_model>
+      <wall_loss_db>20.0</wall_loss_db>
+      <reflection_coeff>0.6</reflection_coeff>
+      <include_shadowing>false</include_shadowing>
+      <max_reflections>2</max_reflections>
+    </plugin>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 60 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>250 250</size></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>250 250</size></plane></geometry>
+          <material><ambient>0.45 0.45 0.45 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Tall central tower with gNB -->
+    <model name="gnb_tower">
+      <static>true</static>
+      <pose>0 0 17.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>6 6 35</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>6 6 35</size></box></geometry>
+          <material><ambient>0.35 0.35 0.4 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="gnb_antenna_mast">
+      <static>true</static>
+      <pose>0 0 38 0 0 0</pose>
+      <link name="link">
+        <visual name="mast">
+          <geometry><cylinder><radius>0.15</radius><length>6</length></cylinder></geometry>
+          <material><ambient>0.6 0.6 0.6 1</ambient></material>
+        </visual>
+        <visual name="antenna1">
+          <pose>0 0.3 2.5 0 0 0</pose>
+          <geometry><box><size>0.5 0.15 1.2</size></box></geometry>
+          <material><ambient>0.8 0.2 0.2 1</ambient></material>
+        </visual>
+        <visual name="antenna2">
+          <pose>0 -0.3 2.5 0 0 0</pose>
+          <geometry><box><size>0.5 0.15 1.2</size></box></geometry>
+          <material><ambient>0.8 0.2 0.2 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Medium-height urban buildings (below tx height) -->
+    <!-- Ring 1 - close buildings -->
+    <model name="bldg_r1_1">
+      <static>true</static>
+      <pose>20 10 10 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>12 10 20</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>12 10 20</size></box></geometry>
+          <material><ambient>0.55 0.5 0.5 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="bldg_r1_2">
+      <static>true</static>
+      <pose>-18 15 12.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>10 12 25</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>10 12 25</size></box></geometry>
+          <material><ambient>0.5 0.55 0.5 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="bldg_r1_3">
+      <static>true</static>
+      <pose>15 -20 9 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>14 8 18</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>14 8 18</size></box></geometry>
+          <material><ambient>0.5 0.5 0.55 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="bldg_r1_4">
+      <static>true</static>
+      <pose>-22 -18 11 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>10 10 22</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>10 10 22</size></box></geometry>
+          <material><ambient>0.55 0.55 0.5 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <!-- Ring 2 - medium distance -->
+    <model name="bldg_r2_1">
+      <static>true</static>
+      <pose>40 25 8 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>16 12 16</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>16 12 16</size></box></geometry>
+          <material><ambient>0.5 0.5 0.5 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="bldg_r2_2">
+      <static>true</static>
+      <pose>-38 30 10 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>12 14 20</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>12 14 20</size></box></geometry>
+          <material><ambient>0.55 0.5 0.55 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="bldg_r2_3">
+      <static>true</static>
+      <pose>35 -35 9 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>14 16 18</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>14 16 18</size></box></geometry>
+          <material><ambient>0.5 0.55 0.55 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="bldg_r2_4">
+      <static>true</static>
+      <pose>-42 -32 7 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>10 12 14</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>10 12 14</size></box></geometry>
+          <material><ambient>0.55 0.55 0.55 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="bldg_r2_5">
+      <static>true</static>
+      <pose>5 45 11 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>18 10 22</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>18 10 22</size></box></geometry>
+          <material><ambient>0.5 0.5 0.55 1</ambient></material></visual>
+      </link>
+    </model>
+
+    <model name="bldg_r2_6">
+      <static>true</static>
+      <pose>-10 -48 8 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>14 14 16</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>14 14 16</size></box></geometry>
+          <material><ambient>0.55 0.5 0.5 1</ambient></material></visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>
