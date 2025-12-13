@@ -74,7 +74,8 @@ chmod +x heatmap_control.sh
 
 # Move gNB to new position
 ```bash
-./heatmap_control.sh move 5 10 12
+# Move existing gNB
+./heatmap_control.sh move 0 5 5 12
 ```
 
 # Query signal at a point
@@ -122,6 +123,26 @@ ign topic -e -t /gnb/heatmap/status -n 1
 ```bash
 ./heatmap_control.sh interactive
 ```
+
+# Add a new gNB
+./heatmap_control.sh add 20 15 10 "NewSite"
+
+# Move existing gNB
+./heatmap_control.sh move 0 5 5 12
+
+# Update gNB parameters
+./heatmap_control.sh update 1 tx_power=35;tx_gain=12
+
+# Switch to SINR view
+./heatmap_control.sh combine sinr
+
+# Query a point
+./heatmap_control.sh query 10 10
+
+# List all gNBs
+./heatmap_control.sh list
+
+
 
 ## Running tests on scenarios
 

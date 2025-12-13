@@ -7,6 +7,7 @@
 #include <memory>
 #include <cmath>
 #include <random>
+#include <optional>
 
 namespace heatmap_plugin
 {

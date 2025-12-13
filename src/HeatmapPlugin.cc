@@ -16,6 +16,7 @@
 #include <ignition/msgs/vector3d.pb.h>
 #include <ignition/msgs/vector2d.pb.h>
 #include <ignition/msgs/double.pb.h>
+#include <ignition/msgs/int32.pb.h>
 #include <ignition/msgs/empty.pb.h>
 #include <ignition/msgs/pose.pb.h>
 #include <ignition/common/Console.hh>
@@ -45,7 +46,7 @@ void HeatmapPlugin::Configure(
 {
     auto sdf = const_cast<sdf::Element*>(_sdf.get());
     
-    // Grid parameters (output resolution)
+    // Grid parameters
     if (sdf->HasElement("grid_w"))
         gridW = sdf->Get<int>("grid_w");
     if (sdf->HasElement("grid_h"))
@@ -53,7 +54,6 @@ void HeatmapPlugin::Configure(
     if (sdf->HasElement("cell_size"))
         cellSize = sdf->Get<double>("cell_size");
     
-    // Calculate base world extents from grid size and cell size
     viewState.baseWorldWidth = gridW * cellSize;
     viewState.baseWorldHeight = gridH * cellSize;
     
@@ -73,7 +73,7 @@ void HeatmapPlugin::Configure(
     if (sdf->HasElement("world_height"))
         viewState.baseWorldHeight = sdf->Get<double>("world_height");
     
-    // RF parameters
+    // Global RF parameters (defaults for all gNBs)
     if (sdf->HasElement("frequency_hz"))
         propConfig.frequencyHz = sdf->Get<double>("frequency_hz");
     if (sdf->HasElement("tx_dbm"))
@@ -86,14 +86,6 @@ void HeatmapPlugin::Configure(
         propConfig.txAntennaGainDbi = sdf->Get<double>("tx_gain_dbi");
     if (sdf->HasElement("rx_gain_dbi"))
         propConfig.rxAntennaGainDbi = sdf->Get<double>("rx_gain_dbi");
-    
-    // gNB position
-    if (sdf->HasElement("gnb_pose"))
-    {
-        auto pose = sdf->Get<math::Pose3d>("gnb_pose");
-        gnbPos = pose.Pos();
-        propConfig.txHeightM = gnbPos.Z();
-    }
     
     // Material properties
     if (sdf->HasElement("wall_loss_db"))
@@ -131,15 +123,97 @@ void HeatmapPlugin::Configure(
     if (sdf->HasElement("max_diffractions"))
         propConfig.maxDiffractions = sdf->Get<int>("max_diffractions");
     
+    // Signal combination mode
+    if (sdf->HasElement("combine_mode"))
+    {
+        std::string mode = sdf->Get<std::string>("combine_mode");
+        if (mode == "best_server" || mode == "best")
+            combineMode = SignalCombineMode::BEST_SERVER;
+        else if (mode == "sum_power" || mode == "sum")
+            combineMode = SignalCombineMode::SUM_POWER;
+        else if (mode == "interference" || mode == "sinr")
+            combineMode = SignalCombineMode::INTERFERENCE;
+    }
+    
     // Interactive features
     if (sdf->HasElement("enable_click_query"))
         enableClickQuery = sdf->Get<bool>("enable_click_query");
 
+    // Parse gNB configurations
+    // Legacy single gNB support
+    if (sdf->HasElement("gnb_pose"))
+    {
+        GnbConfig gnb;
+        gnb.id = GetNextGnbId();
+        gnb.name = "gNB_" + std::to_string(gnb.id);
+        auto pose = sdf->Get<math::Pose3d>("gnb_pose");
+        gnb.position = pose.Pos();
+        gnb.txPowerDbm = propConfig.txPowerDbm;
+        gnb.txGainDbi = propConfig.txAntennaGainDbi;
+        gnb.frequencyHz = propConfig.frequencyHz;
+        gnbConfigs.push_back(gnb);
+    }
+    
+    // Multi-gNB configuration
+    auto gnbElem = sdf->GetElement("gnb");
+    while (gnbElem)
+    {
+        GnbConfig gnb;
+        gnb.id = GetNextGnbId();
+        
+        if (gnbElem->HasAttribute("name"))
+            gnb.name = gnbElem->Get<std::string>("name");
+        else
+            gnb.name = "gNB_" + std::to_string(gnb.id);
+        
+        if (gnbElem->HasElement("pose"))
+        {
+            auto pose = gnbElem->Get<math::Pose3d>("pose");
+            gnb.position = pose.Pos();
+        }
+        
+        // Per-gNB overrides
+        if (gnbElem->HasElement("tx_power"))
+            gnb.txPowerDbm = gnbElem->Get<double>("tx_power");
+        else
+            gnb.txPowerDbm = propConfig.txPowerDbm;
+            
+        if (gnbElem->HasElement("tx_gain"))
+            gnb.txGainDbi = gnbElem->Get<double>("tx_gain");
+        else
+            gnb.txGainDbi = propConfig.txAntennaGainDbi;
+            
+        if (gnbElem->HasElement("frequency"))
+            gnb.frequencyHz = gnbElem->Get<double>("frequency");
+        else
+            gnb.frequencyHz = propConfig.frequencyHz;
+        
+        if (gnbElem->HasElement("enabled"))
+            gnb.enabled = gnbElem->Get<bool>("enabled");
+        
+        gnbConfigs.push_back(gnb);
+        gnbElem = gnbElem->GetNextElement("gnb");
+    }
+    
+    // If no gNBs configured, add a default one
+    if (gnbConfigs.empty())
+    {
+        GnbConfig defaultGnb;
+        defaultGnb.id = GetNextGnbId();
+        defaultGnb.name = "gNB_0";
+        defaultGnb.position = math::Vector3d(0, 0, propConfig.txHeightM);
+        defaultGnb.txPowerDbm = propConfig.txPowerDbm;
+        defaultGnb.txGainDbi = propConfig.txAntennaGainDbi;
+        defaultGnb.frequencyHz = propConfig.frequencyHz;
+        gnbConfigs.push_back(defaultGnb);
+    }
+
     // Initialize propagation model
     propModel = PropagationModelFactory::Create(propConfig.model);
 
-    // Initialize pixel buffer
+    // Initialize pixel buffers
     pixels.assign(gridW * gridH, -200.0f);
+    bestServerMap.assign(gridW * gridH, -1);
 
     // Setup publishers
     heatmapPub = node.Advertise<msgs::Image>("/gnb/heatmap");
@@ -147,12 +221,26 @@ void HeatmapPlugin::Configure(
     clickInfoPub = node.Advertise<msgs::StringMsg>("/gnb/heatmap/click_info");
     queryResultPub = node.Advertise<msgs::StringMsg>("/gnb/heatmap/query_result");
     viewInfoPub = node.Advertise<msgs::StringMsg>("/gnb/heatmap/view_info");
+    gnbListPub = node.Advertise<msgs::StringMsg>("/gnb/heatmap/gnb_list");
+    bestServerPub = node.Advertise<msgs::Image>("/gnb/heatmap/best_server");
 
-    // Setup subscribers for runtime configuration
+    // Setup subscribers - model/config
     node.Subscribe("/gnb/heatmap/set_model", &HeatmapPlugin::OnModelChangeRequest, this);
     node.Subscribe("/gnb/heatmap/config", &HeatmapPlugin::OnConfigUpdate, this);
+    node.Subscribe("/gnb/heatmap/set_combine_mode", &HeatmapPlugin::OnCombineModeChange, this);
+    
+    // Legacy single gNB (moves gNB 0)
     node.Subscribe("/gnb/heatmap/set_position", &HeatmapPlugin::OnGnbPoseChange, this);
     node.Subscribe("/gnb/heatmap/query_position", &HeatmapPlugin::OnMouseClick, this);
+    
+    // Multi-gNB management
+    node.Subscribe("/gnb/heatmap/add_gnb", &HeatmapPlugin::OnAddGnb, this);
+    node.Subscribe("/gnb/heatmap/remove_gnb", &HeatmapPlugin::OnRemoveGnb, this);
+    node.Subscribe("/gnb/heatmap/update_gnb", &HeatmapPlugin::OnUpdateGnb, this);
+    node.Subscribe("/gnb/heatmap/move_gnb", &HeatmapPlugin::OnMoveGnb, this);
+    node.Subscribe("/gnb/heatmap/enable_gnb", &HeatmapPlugin::OnEnableGnb, this);
+    node.Subscribe("/gnb/heatmap/disable_gnb", &HeatmapPlugin::OnDisableGnb, this);
+    node.Subscribe("/gnb/heatmap/list_gnbs", &HeatmapPlugin::OnListGnbs, this);
     
     // View control subscribers
     node.Subscribe("/gnb/heatmap/zoom", &HeatmapPlugin::OnZoom, this);
@@ -161,102 +249,439 @@ void HeatmapPlugin::Configure(
     node.Subscribe("/gnb/heatmap/reset_view", &HeatmapPlugin::OnResetView, this);
     node.Subscribe("/gnb/heatmap/center_on_gnb", &HeatmapPlugin::OnCenterOnGnb, this);
 
-    ignmsg << "=== HeatmapPlugin Configuration ===" << std::endl;
+    ignmsg << "=== HeatmapPlugin Configuration (Multi-gNB) ===" << std::endl;
     ignmsg << "  Output Resolution: " << gridW << "x" << gridH << std::endl;
     ignmsg << "  Base World Size: " << viewState.baseWorldWidth << "x" 
            << viewState.baseWorldHeight << " m" << std::endl;
-    ignmsg << "  Initial View Center: (" << viewState.centerX << ", " 
-           << viewState.centerY << ")" << std::endl;
-    ignmsg << "  Zoom Range: " << viewState.minZoom << "x - " 
-           << viewState.maxZoom << "x" << std::endl;
-    ignmsg << "  Frequency: " << propConfig.frequencyHz / 1e9 << " GHz" << std::endl;
-    ignmsg << "  Tx Power: " << propConfig.txPowerDbm << " dBm" << std::endl;
     ignmsg << "  Propagation Model: " << propModel->GetName() << std::endl;
+    ignmsg << "  Signal Combine Mode: " << 
+        (combineMode == SignalCombineMode::BEST_SERVER ? "Best Server" :
+         combineMode == SignalCombineMode::SUM_POWER ? "Sum Power" : "SINR") << std::endl;
+    ignmsg << "  Number of gNBs: " << gnbConfigs.size() << std::endl;
+    for (const auto& gnb : gnbConfigs)
+    {
+        ignmsg << "    [" << gnb.id << "] " << gnb.name << " at (" 
+               << gnb.position.X() << ", " << gnb.position.Y() << ", " 
+               << gnb.position.Z() << ") " << gnb.txPowerDbm << " dBm"
+               << (gnb.enabled ? "" : " [disabled]") << std::endl;
+    }
     ignmsg << "===============================" << std::endl;
-    ignmsg << "View control topics:" << std::endl;
-    ignmsg << "  /gnb/heatmap/zoom - Zoom in/out (positive=in, negative=out)" << std::endl;
-    ignmsg << "  /gnb/heatmap/pan - Pan view (dx, dy in world units)" << std::endl;
-    ignmsg << "  /gnb/heatmap/set_view - Set view (x, y, zoom in pose msg)" << std::endl;
-    ignmsg << "  /gnb/heatmap/reset_view - Reset to default view" << std::endl;
-    ignmsg << "  /gnb/heatmap/center_on_gnb - Center view on gNB" << std::endl;
-    ignmsg << "  /gnb/heatmap/view_info - Current view info (published)" << std::endl;
+    ignmsg << "Multi-gNB control topics:" << std::endl;
+    ignmsg << "  /gnb/heatmap/add_gnb - Add gNB (Pose: x,y,z position)" << std::endl;
+    ignmsg << "  /gnb/heatmap/remove_gnb - Remove gNB by ID (Int32)" << std::endl;
+    ignmsg << "  /gnb/heatmap/move_gnb - Move gNB (Pose with name=ID)" << std::endl;
+    ignmsg << "  /gnb/heatmap/update_gnb - Update gNB params (StringMsg)" << std::endl;
+    ignmsg << "  /gnb/heatmap/enable_gnb - Enable gNB by ID" << std::endl;
+    ignmsg << "  /gnb/heatmap/disable_gnb - Disable gNB by ID" << std::endl;
+    ignmsg << "  /gnb/heatmap/list_gnbs - List all gNBs" << std::endl;
+    ignmsg << "  /gnb/heatmap/set_combine_mode - best_server/sum_power/sinr" << std::endl;
 
-    // Initial obstacle scan
     UpdateObstacles(_ecm);
 
     running = true;
     worker = std::thread(&HeatmapPlugin::WorkerLoop, this);
 }
 
+int HeatmapPlugin::GetNextGnbId()
+{
+    return nextGnbId++;
+}
+
+// ============================================================================
+// Multi-gNB Management
+// ============================================================================
+
+void HeatmapPlugin::OnAddGnb(const msgs::Pose &_msg)
+{
+    GnbConfig gnb;
+    {
+        std::lock_guard<std::mutex> lock(gnbMutex);
+        gnb.id = GetNextGnbId();
+    }
+    
+    gnb.name = _msg.name().empty() ? "gNB_" + std::to_string(gnb.id) : _msg.name();
+    gnb.position = math::Vector3d(_msg.position().x(), _msg.position().y(), _msg.position().z());
+    
+    // Use defaults from propConfig
+    gnb.txPowerDbm = propConfig.txPowerDbm;
+    gnb.txGainDbi = propConfig.txAntennaGainDbi;
+    gnb.frequencyHz = propConfig.frequencyHz;
+    gnb.enabled = true;
+    
+    {
+        std::lock_guard<std::mutex> lock(gnbMutex);
+        gnbConfigs.push_back(gnb);
+    }
+    
+    needsRecalculation = true;
+    ignmsg << "Added gNB [" << gnb.id << "] '" << gnb.name << "' at (" 
+           << gnb.position.X() << ", " << gnb.position.Y() << ", " 
+           << gnb.position.Z() << ")" << std::endl;
+    
+    PublishGnbList();
+}
+
+void HeatmapPlugin::OnRemoveGnb(const msgs::Int32 &_msg)
+{
+    int idToRemove = _msg.data();
+    
+    std::lock_guard<std::mutex> lock(gnbMutex);
+    
+    auto it = std::find_if(gnbConfigs.begin(), gnbConfigs.end(),
+        [idToRemove](const GnbConfig& g) { return g.id == idToRemove; });
+    
+    if (it != gnbConfigs.end())
+    {
+        std::string name = it->name;
+        gnbConfigs.erase(it);
+        needsRecalculation = true;
+        ignmsg << "Removed gNB [" << idToRemove << "] '" << name << "'" << std::endl;
+        PublishGnbList();
+    }
+    else
+    {
+        ignwarn << "gNB with ID " << idToRemove << " not found" << std::endl;
+    }
+}
+
+void HeatmapPlugin::OnMoveGnb(const msgs::Pose &_msg)
+{
+    // Use pose.name as string ID, or position.w as numeric ID
+    int targetId = -1;
+    
+    if (!_msg.name().empty())
+    {
+        try { targetId = std::stoi(_msg.name()); }
+        catch (...) { targetId = 0; }  // Default to first gNB
+    }
+    else
+    {
+        targetId = static_cast<int>(_msg.orientation().w());
+    }
+    
+    std::lock_guard<std::mutex> lock(gnbMutex);
+    
+    for (auto& gnb : gnbConfigs)
+    {
+        if (gnb.id == targetId)
+        {
+            gnb.position = math::Vector3d(
+                _msg.position().x(), _msg.position().y(), _msg.position().z());
+            needsRecalculation = true;
+            ignmsg << "Moved gNB [" << gnb.id << "] to (" << gnb.position.X() 
+                   << ", " << gnb.position.Y() << ", " << gnb.position.Z() << ")" << std::endl;
+            return;
+        }
+    }
+    
+    ignwarn << "gNB with ID " << targetId << " not found for move" << std::endl;
+}
+
+void HeatmapPlugin::OnUpdateGnb(const msgs::StringMsg &_msg)
+{
+    // Format: "id=0;tx_power=35;tx_gain=10;frequency=3.5e9;name=NewName"
+    std::istringstream iss(_msg.data());
+    std::string token;
+    
+    int targetId = -1;
+    std::map<std::string, std::string> params;
+    
+    while (std::getline(iss, token, ';'))
+    {
+        auto pos = token.find('=');
+        if (pos == std::string::npos) continue;
+        
+        std::string key = token.substr(0, pos);
+        std::string value = token.substr(pos + 1);
+        
+        if (key == "id")
+            targetId = std::stoi(value);
+        else
+            params[key] = value;
+    }
+    
+    if (targetId < 0)
+    {
+        ignwarn << "No gNB ID specified in update" << std::endl;
+        return;
+    }
+    
+    std::lock_guard<std::mutex> lock(gnbMutex);
+    
+    for (auto& gnb : gnbConfigs)
+    {
+        if (gnb.id == targetId)
+        {
+            for (const auto& [key, value] : params)
+            {
+                try
+                {
+                    if (key == "tx_power")
+                        gnb.txPowerDbm = std::stod(value);
+                    else if (key == "tx_gain")
+                        gnb.txGainDbi = std::stod(value);
+                    else if (key == "frequency")
+                        gnb.frequencyHz = std::stod(value);
+                    else if (key == "name")
+                        gnb.name = value;
+                    else if (key == "enabled")
+                        gnb.enabled = (value == "true" || value == "1");
+                    
+                    ignmsg << "Updated gNB [" << targetId << "] " << key << " = " << value << std::endl;
+                }
+                catch (const std::exception& e)
+                {
+                    ignwarn << "Failed to parse " << key << ": " << e.what() << std::endl;
+                }
+            }
+            needsRecalculation = true;
+            return;
+        }
+    }
+    
+    ignwarn << "gNB with ID " << targetId << " not found" << std::endl;
+}
+
+void HeatmapPlugin::OnEnableGnb(const msgs::Int32 &_msg)
+{
+    int targetId = _msg.data();
+    std::lock_guard<std::mutex> lock(gnbMutex);
+    
+    for (auto& gnb : gnbConfigs)
+    {
+        if (gnb.id == targetId)
+        {
+            gnb.enabled = true;
+            needsRecalculation = true;
+            ignmsg << "Enabled gNB [" << targetId << "]" << std::endl;
+            return;
+        }
+    }
+    ignwarn << "gNB with ID " << targetId << " not found" << std::endl;
+}
+
+void HeatmapPlugin::OnDisableGnb(const msgs::Int32 &_msg)
+{
+    int targetId = _msg.data();
+    std::lock_guard<std::mutex> lock(gnbMutex);
+    
+    for (auto& gnb : gnbConfigs)
+    {
+        if (gnb.id == targetId)
+        {
+            gnb.enabled = false;
+            needsRecalculation = true;
+            ignmsg << "Disabled gNB [" << targetId << "]" << std::endl;
+            return;
+        }
+    }
+    ignwarn << "gNB with ID " << targetId << " not found" << std::endl;
+}
+
+void HeatmapPlugin::OnListGnbs(const msgs::Empty &/*_msg*/)
+{
+    PublishGnbList();
+}
+
+void HeatmapPlugin::PublishGnbList()
+{
+    std::ostringstream oss;
+    
+    std::lock_guard<std::mutex> lock(gnbMutex);
+    
+    oss << "gnb_count=" << gnbConfigs.size() << ";";
+    
+    for (const auto& gnb : gnbConfigs)
+    {
+        oss << "gnb[" << gnb.id << "]={name=" << gnb.name
+            << ",x=" << gnb.position.X()
+            << ",y=" << gnb.position.Y()
+            << ",z=" << gnb.position.Z()
+            << ",power=" << gnb.txPowerDbm
+            << ",gain=" << gnb.txGainDbi
+            << ",freq=" << gnb.frequencyHz
+            << ",enabled=" << (gnb.enabled ? "true" : "false")
+            << "};";
+    }
+    
+    msgs::StringMsg msg;
+    msg.set_data(oss.str());
+    gnbListPub.Publish(msg);
+}
+
+void HeatmapPlugin::OnCombineModeChange(const msgs::StringMsg &_msg)
+{
+    std::string mode = _msg.data();
+    
+    if (mode == "best_server" || mode == "best")
+        combineMode = SignalCombineMode::BEST_SERVER;
+    else if (mode == "sum_power" || mode == "sum")
+        combineMode = SignalCombineMode::SUM_POWER;
+    else if (mode == "interference" || mode == "sinr")
+        combineMode = SignalCombineMode::INTERFERENCE;
+    else
+    {
+        ignwarn << "Unknown combine mode: " << mode << std::endl;
+        return;
+    }
+    
+    needsRecalculation = true;
+    ignmsg << "Signal combine mode changed to: " << mode << std::endl;
+}
+
+// ============================================================================
+// Legacy Single-gNB Handlers (operate on gNB 0)
+// ============================================================================
+
+void HeatmapPlugin::OnGnbPoseChange(const msgs::Pose &_msg)
+{
+    math::Vector3d newPos(_msg.position().x(), _msg.position().y(), _msg.position().z());
+    
+    std::lock_guard<std::mutex> lock(gnbMutex);
+    
+    if (!gnbConfigs.empty())
+    {
+        gnbConfigs[0].position = newPos;
+        needsRecalculation = true;
+        ignmsg << "gNB [0] position updated to: (" << newPos.X() << ", " 
+               << newPos.Y() << ", " << newPos.Z() << ")" << std::endl;
+    }
+}
+
+// ============================================================================
+// Signal Calculation
+// ============================================================================
+
+SignalResult HeatmapPlugin::CalculateSignalAtPoint(
+    const ignition::math::Vector3d &rxPos,
+    const std::vector<GnbConfig> &gnbs,
+    const std::vector<Obstacle> &obstacles,
+    const PropagationConfig &config,
+    IPropagationModel *model)
+{
+    SignalResult result;
+    result.bestSignalDbm = -200.0;
+    result.bestGnbId = -1;
+    
+    double totalLinearPower = 0.0;
+    double noiseFloor = -100.0;  // dBm
+    
+    for (const auto& gnb : gnbs)
+    {
+        if (!gnb.enabled) continue;
+        
+        // Create per-gNB config
+        PropagationConfig gnbConfig = config;
+        gnbConfig.txPowerDbm = gnb.txPowerDbm;
+        gnbConfig.txAntennaGainDbi = gnb.txGainDbi;
+        gnbConfig.frequencyHz = gnb.frequencyHz;
+        gnbConfig.txHeightM = gnb.position.Z();
+        
+        double signalDbm = model->CalculateReceivedPower(
+            gnb.position, rxPos, obstacles, gnbConfig);
+        
+        result.allSignals.push_back({gnb.id, signalDbm});
+        
+        // Track best server
+        if (signalDbm > result.bestSignalDbm)
+        {
+            result.bestSignalDbm = signalDbm;
+            result.bestGnbId = gnb.id;
+        }
+        
+        // Accumulate linear power
+        totalLinearPower += std::pow(10.0, signalDbm / 10.0);
+    }
+    
+    // Total power (sum)
+    if (totalLinearPower > 0)
+        result.totalPowerDbm = 10.0 * std::log10(totalLinearPower);
+    else
+        result.totalPowerDbm = -200.0;
+    
+    // Calculate SINR (best signal vs interference + noise)
+    if (result.bestGnbId >= 0)
+    {
+        double bestLinear = std::pow(10.0, result.bestSignalDbm / 10.0);
+        double interferenceLinear = totalLinearPower - bestLinear;
+        double noiseLinear = std::pow(10.0, noiseFloor / 10.0);
+        
+        if (interferenceLinear + noiseLinear > 0)
+            result.sinrDb = 10.0 * std::log10(bestLinear / (interferenceLinear + noiseLinear));
+        else
+            result.sinrDb = 50.0;  // Very high SINR
+    }
+    
+    return result;
+}
+
+// ============================================================================
+// View Controls
+// ============================================================================
+
 void HeatmapPlugin::OnZoom(const msgs::Double &_msg)
 {
     std::lock_guard<std::mutex> lock(viewMutex);
-    
     double zoomDelta = _msg.data();
     double newZoom = viewState.zoomLevel * (1.0 + zoomDelta * 0.1);
     viewState.zoomLevel = std::clamp(newZoom, viewState.minZoom, viewState.maxZoom);
-    
     needsRecalculation = true;
-    ignmsg << "Zoom level: " << viewState.zoomLevel << "x (visible area: " 
-           << viewState.GetVisibleWidth() << "x" << viewState.GetVisibleHeight() 
-           << " m)" << std::endl;
 }
 
 void HeatmapPlugin::OnPan(const msgs::Vector2d &_msg)
 {
     std::lock_guard<std::mutex> lock(viewMutex);
-    
-    // Pan in world coordinates (scaled by zoom for consistent feel)
     double panScale = 1.0 / viewState.zoomLevel;
     viewState.centerX += _msg.x() * panScale;
     viewState.centerY += _msg.y() * panScale;
-    
     needsRecalculation = true;
-    ignmsg << "View center: (" << viewState.centerX << ", " << viewState.centerY 
-           << ")" << std::endl;
 }
 
 void HeatmapPlugin::OnSetView(const msgs::Pose &_msg)
 {
     std::lock_guard<std::mutex> lock(viewMutex);
-    
     viewState.centerX = _msg.position().x();
     viewState.centerY = _msg.position().y();
-    
-    // Use z for zoom level if provided and positive
     if (_msg.position().z() > 0)
-    {
-        viewState.zoomLevel = std::clamp(_msg.position().z(), 
-                                          viewState.minZoom, viewState.maxZoom);
-    }
-    
+        viewState.zoomLevel = std::clamp(_msg.position().z(), viewState.minZoom, viewState.maxZoom);
     needsRecalculation = true;
-    ignmsg << "View set to: center=(" << viewState.centerX << ", " 
-           << viewState.centerY << "), zoom=" << viewState.zoomLevel << "x" << std::endl;
 }
 
 void HeatmapPlugin::OnResetView(const msgs::Empty &/*_msg*/)
 {
     std::lock_guard<std::mutex> lock(viewMutex);
-    
     viewState.centerX = 0.0;
     viewState.centerY = 0.0;
     viewState.zoomLevel = 1.0;
-    
     needsRecalculation = true;
-    ignmsg << "View reset to default" << std::endl;
 }
 
-void HeatmapPlugin::OnCenterOnGnb(const msgs::Empty &/*_msg*/)
+void HeatmapPlugin::OnCenterOnGnb(const msgs::Int32 &_msg)
 {
-    std::lock_guard<std::mutex> lock(viewMutex);
+    int targetId = _msg.data();
     
-    viewState.centerX = gnbPos.X();
-    viewState.centerY = gnbPos.Y();
+    std::lock_guard<std::mutex> lock1(gnbMutex);
+    std::lock_guard<std::mutex> lock2(viewMutex);
     
-    needsRecalculation = true;
-    ignmsg << "View centered on gNB at (" << viewState.centerX << ", " 
-           << viewState.centerY << ")" << std::endl;
+    for (const auto& gnb : gnbConfigs)
+    {
+        if (gnb.id == targetId)
+        {
+            viewState.centerX = gnb.position.X();
+            viewState.centerY = gnb.position.Y();
+            needsRecalculation = true;
+            ignmsg << "View centered on gNB [" << targetId << "]" << std::endl;
+            return;
+        }
+    }
+    
+    // Default to first gNB if ID not found
+    if (!gnbConfigs.empty())
+    {
+        viewState.centerX = gnbConfigs[0].position.X();
+        viewState.centerY = gnbConfigs[0].position.Y();
+        needsRecalculation = true;
+    }
 }
 
 void HeatmapPlugin::PublishViewInfo()
@@ -273,16 +698,16 @@ void HeatmapPlugin::PublishViewInfo()
         << "center_y=" << localView.centerY << ";"
         << "zoom=" << localView.zoomLevel << ";"
         << "visible_w=" << localView.GetVisibleWidth() << ";"
-        << "visible_h=" << localView.GetVisibleHeight() << ";"
-        << "min_x=" << localView.GetMinX() << ";"
-        << "max_x=" << localView.GetMaxX() << ";"
-        << "min_y=" << localView.GetMinY() << ";"
-        << "max_y=" << localView.GetMaxY();
+        << "visible_h=" << localView.GetVisibleHeight();
     
     msgs::StringMsg msg;
     msg.set_data(oss.str());
     viewInfoPub.Publish(msg);
 }
+
+// ============================================================================
+// Model/Config Updates
+// ============================================================================
 
 void HeatmapPlugin::OnModelChangeRequest(const msgs::StringMsg &_msg)
 {
@@ -360,89 +785,72 @@ void HeatmapPlugin::OnConfigUpdate(const msgs::StringMsg &_msg)
     needsRecalculation = true;
 }
 
-void HeatmapPlugin::OnGnbPoseChange(const msgs::Pose &_msg)
-{
-    math::Vector3d newPos(
-        _msg.position().x(),
-        _msg.position().y(),
-        _msg.position().z()
-    );
-    
-    {
-        std::lock_guard<std::mutex> lock(modelMutex);
-        gnbPos = newPos;
-        propConfig.txHeightM = gnbPos.Z();
-    }
-    
-    needsRecalculation = true;
-    ignmsg << "gNB position updated to: (" << gnbPos.X() << ", " 
-           << gnbPos.Y() << ", " << gnbPos.Z() << ")" << std::endl;
-}
+// ============================================================================
+// Interactive Query
+// ============================================================================
 
 void HeatmapPlugin::OnMouseClick(const msgs::Vector3d &_msg)
 {
-    if (!enableClickQuery)
-        return;
-    
+    if (!enableClickQuery) return;
     math::Vector3d clickPos(_msg.x(), _msg.y(), _msg.z());
     QuerySignalAtPosition(clickPos);
 }
 
 void HeatmapPlugin::QuerySignalAtPosition(const math::Vector3d &_pos)
 {
+    std::vector<GnbConfig> localGnbs;
     std::vector<Obstacle> localObstacles;
     PropagationConfig localConfig;
     std::unique_ptr<IPropagationModel> localModel;
-    math::Vector3d localGnbPos;
     
     {
-        std::lock_guard<std::mutex> lock1(obstacleMutex);
-        std::lock_guard<std::mutex> lock2(modelMutex);
+        std::lock_guard<std::mutex> lock1(gnbMutex);
+        std::lock_guard<std::mutex> lock2(obstacleMutex);
+        std::lock_guard<std::mutex> lock3(modelMutex);
+        localGnbs = gnbConfigs;
         localObstacles = obstacles;
         localConfig = propConfig;
         localModel = PropagationModelFactory::Create(localConfig.model);
-        localGnbPos = gnbPos;
     }
     
     math::Vector3d queryPos(_pos.X(), _pos.Y(), localConfig.rxHeightM);
-    double signalDbm = localModel->CalculateReceivedPower(
-        localGnbPos, queryPos, localObstacles, localConfig);
     
-    double distance = localGnbPos.Distance(queryPos);
+    auto result = CalculateSignalAtPoint(queryPos, localGnbs, localObstacles, 
+                                         localConfig, localModel.get());
     
     std::ostringstream detailOss;
     detailOss << std::fixed << std::setprecision(2);
     detailOss << "=== Signal Query Result ===" << std::endl;
-    detailOss << "Position: (" << _pos.X() << ", " << _pos.Y() << ", " << _pos.Z() << ")" << std::endl;
-    detailOss << "Distance from gNB: " << distance << " m" << std::endl;
-    detailOss << "Signal Strength: " << signalDbm << " dBm" << std::endl;
-    detailOss << "Model: " << localModel->GetName() << std::endl;
+    detailOss << "Position: (" << _pos.X() << ", " << _pos.Y() << ")" << std::endl;
+    detailOss << "Best Server: gNB [" << result.bestGnbId << "]" << std::endl;
+    detailOss << "Best Signal: " << result.bestSignalDbm << " dBm" << std::endl;
+    detailOss << "Total Power: " << result.totalPowerDbm << " dBm" << std::endl;
+    detailOss << "SINR: " << result.sinrDb << " dB" << std::endl;
+    detailOss << "--- Per-gNB Signals ---" << std::endl;
     
-    if (signalDbm >= -70)
-        detailOss << "Quality: Excellent" << std::endl;
-    else if (signalDbm >= -85)
-        detailOss << "Quality: Good" << std::endl;
-    else if (signalDbm >= -100)
-        detailOss << "Quality: Fair" << std::endl;
-    else if (signalDbm >= -115)
-        detailOss << "Quality: Poor" << std::endl;
-    else
-        detailOss << "Quality: Very Poor/No Service" << std::endl;
+    for (const auto& [id, signal] : result.allSignals)
+    {
+        auto it = std::find_if(localGnbs.begin(), localGnbs.end(),
+            [id](const GnbConfig& g) { return g.id == id; });
+        std::string name = (it != localGnbs.end()) ? it->name : "Unknown";
+        double dist = (it != localGnbs.end()) ? it->position.Distance(queryPos) : 0;
+        detailOss << "  [" << id << "] " << name << ": " << signal << " dBm"
+                  << " (d=" << dist << " m)" << std::endl;
+    }
     
-    std::string detailStr = detailOss.str();
-    ignmsg << detailStr;
+    ignmsg << detailOss.str();
     
     msgs::StringMsg clickMsg;
     std::ostringstream clickOss;
     clickOss << std::fixed << std::setprecision(1);
     clickOss << "Pos: (" << _pos.X() << ", " << _pos.Y() << ") | "
-             << "Signal: " << signalDbm << " dBm | "
-             << "Dist: " << distance << " m";
+             << "Best: gNB[" << result.bestGnbId << "] " << result.bestSignalDbm << " dBm | "
+             << "SINR: " << result.sinrDb << " dB";
     clickMsg.set_data(clickOss.str());
     clickInfoPub.Publish(clickMsg);
     
     msgs::StringMsg resultMsg;
-    resultMsg.set_data(detailStr);
+    resultMsg.set_data(detailOss.str());
     queryResultPub.Publish(resultMsg);
 }
 
@@ -450,11 +858,15 @@ void HeatmapPlugin::PublishStatus()
 {
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(2);
+    
+    std::lock_guard<std::mutex> lock1(gnbMutex);
+    std::lock_guard<std::mutex> lock2(modelMutex);
+    
     oss << "model=" << propModel->GetName() << ";"
+        << "combine_mode=" << (combineMode == SignalCombineMode::BEST_SERVER ? "best_server" :
+                               combineMode == SignalCombineMode::SUM_POWER ? "sum_power" : "sinr") << ";"
+        << "gnb_count=" << gnbConfigs.size() << ";"
         << "frequency=" << propConfig.frequencyHz << ";"
-        << "tx_power=" << propConfig.txPowerDbm << ";"
-        << "tx_pos=(" << gnbPos.X() << "," << gnbPos.Y() << "," << gnbPos.Z() << ");"
-        << "tx_height=" << propConfig.txHeightM << ";"
         << "rx_height=" << propConfig.rxHeightM << ";"
         << "wall_loss=" << propConfig.defaultMaterial.penetrationLoss_dB << ";"
         << "obstacles=" << obstacles.size() << ";"
@@ -465,12 +877,13 @@ void HeatmapPlugin::PublishStatus()
     statusPub.Publish(msg);
 }
 
-void HeatmapPlugin::PreUpdate(
-    const UpdateInfo &_info,
-    EntityComponentManager &_ecm)
+// ============================================================================
+// PreUpdate / Obstacle Update
+// ============================================================================
+
+void HeatmapPlugin::PreUpdate(const UpdateInfo &_info, EntityComponentManager &_ecm)
 {
-    if (_info.paused)
-        return;
+    if (_info.paused) return;
 
     uint64_t currentIter = _info.iterations;
     
@@ -506,10 +919,8 @@ void HeatmapPlugin::UpdateObstacles(EntityComponentManager &_ecm)
     std::vector<Obstacle> newObstacles;
 
     _ecm.Each<components::Model, components::Name, components::Pose>(
-        [&](const Entity &modelEntity,
-            const components::Model *,
-            const components::Name *nameComp,
-            const components::Pose *poseComp) -> bool
+        [&](const Entity &modelEntity, const components::Model *,
+            const components::Name *nameComp, const components::Pose *poseComp) -> bool
         {
             std::string modelName = nameComp->Data();
             std::string lowerName = modelName;
@@ -523,26 +934,21 @@ void HeatmapPlugin::UpdateObstacles(EntityComponentManager &_ecm)
             math::Pose3d modelPose = poseComp->Data();
 
             _ecm.Each<components::Link, components::ParentEntity, components::Pose>(
-                [&](const Entity &linkEntity,
-                    const components::Link *,
+                [&](const Entity &linkEntity, const components::Link *,
                     const components::ParentEntity *parentComp,
                     const components::Pose *linkPoseComp) -> bool
                 {
-                    if (parentComp->Data() != modelEntity)
-                        return true;
-
+                    if (parentComp->Data() != modelEntity) return true;
                     math::Pose3d linkPose = linkPoseComp->Data();
 
                     _ecm.Each<components::Collision, components::ParentEntity, 
                              components::Geometry, components::Pose>(
-                        [&](const Entity &,
-                            const components::Collision *,
+                        [&](const Entity &, const components::Collision *,
                             const components::ParentEntity *collParentComp,
                             const components::Geometry *geomComp,
                             const components::Pose *collPoseComp) -> bool
                         {
-                            if (collParentComp->Data() != linkEntity)
-                                return true;
+                            if (collParentComp->Data() != linkEntity) return true;
 
                             const sdf::Geometry &geom = geomComp->Data();
                             math::Pose3d collPose = collPoseComp->Data();
@@ -571,8 +977,7 @@ void HeatmapPlugin::UpdateObstacles(EntityComponentManager &_ecm)
                             {
                                 math::Vector3d halfSize = obs.size / 2.0;
                                 obs.bbox = math::AxisAlignedBox(
-                                    obs.position - halfSize,
-                                    obs.position + halfSize);
+                                    obs.position - halfSize, obs.position + halfSize);
                                 newObstacles.push_back(obs);
                             }
                             return true;
@@ -603,10 +1008,13 @@ void HeatmapPlugin::UpdateObstacles(EntityComponentManager &_ecm)
         {
             obstacles = std::move(newObstacles);
             needsRecalculation = true;
-            igndbg << "Obstacles updated: " << obstacles.size() << " found" << std::endl;
         }
     }
 }
+
+// ============================================================================
+// Worker Loop / Heatmap Generation
+// ============================================================================
 
 void HeatmapPlugin::WorkerLoop()
 {
@@ -620,43 +1028,41 @@ void HeatmapPlugin::WorkerLoop()
         
         needsRecalculation = false;
 
-        // Get current view state
         ViewState localView;
         {
             std::lock_guard<std::mutex> lock(viewMutex);
             localView = viewState;
         }
 
-        // Calculate world bounds for current view
         double minX = localView.GetMinX();
-        double maxX = localView.GetMaxX();
         double minY = localView.GetMinY();
-        double maxY = localView.GetMaxY();
         double visibleWidth = localView.GetVisibleWidth();
         double visibleHeight = localView.GetVisibleHeight();
 
         std::vector<float> newPixels(gridW * gridH);
+        std::vector<int> newBestServer(gridW * gridH);
 
-        // Copy data for thread safety
+        std::vector<GnbConfig> localGnbs;
         std::vector<Obstacle> localObstacles;
         PropagationConfig localConfig;
         std::unique_ptr<IPropagationModel> localModel;
-        ignition::math::Vector3d txPos;
+        SignalCombineMode localCombineMode;
         
         {
-            std::lock_guard<std::mutex> lock1(obstacleMutex);
-            std::lock_guard<std::mutex> lock2(modelMutex);
+            std::lock_guard<std::mutex> lock1(gnbMutex);
+            std::lock_guard<std::mutex> lock2(obstacleMutex);
+            std::lock_guard<std::mutex> lock3(modelMutex);
+            localGnbs = gnbConfigs;
             localObstacles = obstacles;
             localConfig = propConfig;
             localModel = PropagationModelFactory::Create(localConfig.model);
-            txPos = gnbPos;
+            localCombineMode = combineMode;
         }
 
         for (int y = 0; y < gridH && running; ++y)
         {
             for (int x = 0; x < gridW; ++x)
             {
-                // Map pixel to world coordinates based on current view
                 double nx = static_cast<double>(x) / (gridW - 1);
                 double ny = static_cast<double>(y) / (gridH - 1);
                 
@@ -665,21 +1071,35 @@ void HeatmapPlugin::WorkerLoop()
 
                 math::Vector3d rxPos(worldX, worldY, localConfig.rxHeightM);
 
-                double rxPower = localModel->CalculateReceivedPower(
-                    txPos, rxPos, localObstacles, localConfig);
+                auto result = CalculateSignalAtPoint(rxPos, localGnbs, localObstacles,
+                                                     localConfig, localModel.get());
 
-                newPixels[y * gridW + x] = static_cast<float>(rxPower);
+                float displayValue;
+                switch (localCombineMode)
+                {
+                    case SignalCombineMode::BEST_SERVER:
+                        displayValue = static_cast<float>(result.bestSignalDbm);
+                        break;
+                    case SignalCombineMode::SUM_POWER:
+                        displayValue = static_cast<float>(result.totalPowerDbm);
+                        break;
+                    case SignalCombineMode::INTERFERENCE:
+                        displayValue = static_cast<float>(result.sinrDb);
+                        break;
+                }
+
+                newPixels[y * gridW + x] = displayValue;
+                newBestServer[y * gridW + x] = result.bestGnbId;
             }
         }
 
         {
             std::lock_guard<std::mutex> lock(bufMutex);
             pixels = std::move(newPixels);
+            bestServerMap = std::move(newBestServer);
         }
 
-        igndbg << "Heatmap recalculated for view center=(" << localView.centerX 
-               << ", " << localView.centerY << "), zoom=" << localView.zoomLevel 
-               << "x" << std::endl;
+        igndbg << "Heatmap recalculated with " << localGnbs.size() << " gNBs" << std::endl;
     }
 }
 
@@ -693,18 +1113,32 @@ void HeatmapPlugin::PublishHeatmap()
 
     std::vector<uint8_t> rgbData(gridW * gridH * 3);
 
-    const float MIN_DBM = -120.0f;
-    const float MAX_DBM = -30.0f;
-    const float RANGE_DBM = MAX_DBM - MIN_DBM;
+    // Color ranges depend on combine mode
+    float minVal, maxVal;
+    {
+        std::lock_guard<std::mutex> lock(modelMutex);
+        if (combineMode == SignalCombineMode::INTERFERENCE)
+        {
+            minVal = -10.0f;  // SINR range
+            maxVal = 30.0f;
+        }
+        else
+        {
+            minVal = -120.0f;  // dBm range
+            maxVal = -30.0f;
+        }
+    }
+    
+    const float range = maxVal - minVal;
 
     {
         std::lock_guard<std::mutex> lock(bufMutex);
         
         for (int i = 0; i < gridW * gridH; ++i)
         {
-            float dbm = pixels[i];
+            float val = pixels[i];
             
-            if (dbm <= MIN_DBM)
+            if (val <= minVal)
             {
                 rgbData[i * 3 + 0] = 30;
                 rgbData[i * 3 + 1] = 30;
@@ -712,7 +1146,7 @@ void HeatmapPlugin::PublishHeatmap()
                 continue;
             }
             
-            float normalized = (dbm - MIN_DBM) / RANGE_DBM;
+            float normalized = (val - minVal) / range;
             normalized = std::clamp(normalized, 0.0f, 1.0f);
 
             uint8_t r, g, b;

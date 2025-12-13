@@ -1,7 +1,8 @@
 #!/bin/bash
-# Heatmap Plugin Control Script - Interactive Edition with Pan/Zoom
+# Heatmap Plugin Control Script - Multi-gNB Edition
 # Usage: ./heatmap_control.sh <command> [args]
 
+# Topics
 TOPIC_SET_MODEL="/gnb/heatmap/set_model"
 TOPIC_CONFIG="/gnb/heatmap/config"
 TOPIC_STATUS="/gnb/heatmap/status"
@@ -16,60 +17,242 @@ TOPIC_RESET_VIEW="/gnb/heatmap/reset_view"
 TOPIC_CENTER_GNB="/gnb/heatmap/center_on_gnb"
 TOPIC_VIEW_INFO="/gnb/heatmap/view_info"
 
+# Multi-gNB topics
+TOPIC_ADD_GNB="/gnb/heatmap/add_gnb"
+TOPIC_REMOVE_GNB="/gnb/heatmap/remove_gnb"
+TOPIC_MOVE_GNB="/gnb/heatmap/move_gnb"
+TOPIC_UPDATE_GNB="/gnb/heatmap/update_gnb"
+TOPIC_ENABLE_GNB="/gnb/heatmap/enable_gnb"
+TOPIC_DISABLE_GNB="/gnb/heatmap/disable_gnb"
+TOPIC_LIST_GNBS="/gnb/heatmap/list_gnbs"
+TOPIC_GNB_LIST="/gnb/heatmap/gnb_list"
+TOPIC_COMBINE_MODE="/gnb/heatmap/set_combine_mode"
+
 show_help() {
-    echo "RF Heatmap Plugin Control - Interactive Edition with Pan/Zoom"
+    echo "RF Heatmap Plugin Control - Multi-gNB Edition"
     echo ""
     echo "Usage: $0 <command> [arguments]"
     echo ""
-    echo "View Control Commands:"
-    echo "  zoom_in [amount]     - Zoom in (default: 2 steps)"
-    echo "  zoom_out [amount]    - Zoom out (default: 2 steps)"
-    echo "  zoom <level>         - Set zoom to specific level (e.g., 2.0 for 2x)"
-    echo "  pan <dx> <dy>        - Pan view by dx, dy in world units"
-    echo "  goto <x> <y> [zoom]  - Go to position with optional zoom level"
-    echo "  center               - Center view on gNB transmitter"
-    echo "  reset                - Reset view to default (origin, zoom=1)"
-    echo "  view                 - Show current view info"
-    echo "  watch_view           - Continuously watch view info (Ctrl+C to stop)"
+    echo "=== Multi-gNB Commands ==="
+    echo "  add <x> <y> <z> [name]   - Add new gNB at position"
+    echo "  remove <id>              - Remove gNB by ID"
+    echo "  move <id> <x> <y> <z>    - Move gNB to new position"
+    echo "  enable <id>              - Enable gNB"
+    echo "  disable <id>             - Disable gNB"
+    echo "  update <id> <params>     - Update gNB parameters"
+    echo "                             e.g., update 0 tx_power=35;tx_gain=12"
+    echo "  list                     - List all gNBs"
+    echo "  watch_list               - Continuously watch gNB list"
     echo ""
-    echo "Model Commands:"
-    echo "  model <name>         - Switch propagation model"
-    echo "                         Options: free_space, 3gpp_umi, 3gpp_uma, ray_tracing, hybrid"
+    echo "=== Signal Combination ==="
+    echo "  combine <mode>           - Set signal combination mode"
+    echo "                             Modes: best_server, sum_power, sinr"
     echo ""
-    echo "Configuration Commands:"
-    echo "  config <params>      - Update configuration parameters"
-    echo "                         Format: key1=value1;key2=value2"
+    echo "=== View Control Commands ==="
+    echo "  zoom_in [amount]         - Zoom in (default: 2 steps)"
+    echo "  zoom_out [amount]        - Zoom out (default: 2 steps)"
+    echo "  zoom <level>             - Set zoom to specific level"
+    echo "  pan <dx> <dy>            - Pan view by dx, dy in world units"
+    echo "  goto <x> <y> [zoom]      - Go to position with optional zoom"
+    echo "  center [id]              - Center view on gNB (default: 0)"
+    echo "  reset                    - Reset view to default"
+    echo "  view                     - Show current view info"
     echo ""
-    echo "Quick Config Commands:"
-    echo "  power <dbm>          - Set transmit power"
-    echo "  freq <hz>            - Set frequency"
-    echo "  wall_loss <db>       - Set wall penetration loss"
-    echo "  shadowing <on|off>   - Enable/disable shadowing"
+    echo "=== Model Commands ==="
+    echo "  model <name>             - Switch propagation model"
+    echo "                             Options: free_space, 3gpp_umi, 3gpp_uma,"
+    echo "                                      ray_tracing, hybrid"
     echo ""
-    echo "Interactive Commands:"
-    echo "  move <x> <y> <z>     - Move gNB transmitter to position"
-    echo "  query <x> <y> <z>    - Query signal strength at position"
-    echo "  listen_clicks        - Listen to click query results"
+    echo "=== Global Config Commands ==="
+    echo "  config <params>          - Update global config"
+    echo "  power <dbm>              - Set default transmit power"
+    echo "  freq <hz>                - Set default frequency"
+    echo "  wall_loss <db>           - Set wall penetration loss"
+    echo "  shadowing <on|off>       - Enable/disable shadowing"
     echo ""
-    echo "Status Commands:"
-    echo "  status               - Show current status"
-    echo "  watch_status         - Continuously watch status updates"
+    echo "=== Interactive Commands ==="
+    echo "  query <x> <y> [z]        - Query signal strength at position"
+    echo "  listen_clicks            - Listen to click query results"
     echo ""
-    echo "Interactive Navigation (keyboard):"
-    echo "  interactive          - Start interactive keyboard navigation"
-    echo "                         W/S: Pan up/down, A/D: Pan left/right"
-    echo "                         +/-: Zoom in/out, C: Center on gNB"
-    echo "                         R: Reset view, Q: Quit"
+    echo "=== Status Commands ==="
+    echo "  status                   - Show current status"
+    echo "  watch_status             - Continuously watch status"
+    echo ""
+    echo "=== Demo Commands ==="
+    echo "  demo_multi               - Set up demo with 3 gNBs"
+    echo "  demo_interference        - Demo interference analysis"
     echo ""
     echo "Examples:"
-    echo "  $0 zoom_in 5          # Zoom in 5 steps"
-    echo "  $0 pan 10 -5          # Pan 10m right, 5m down"
-    echo "  $0 goto 50 30 4       # Go to (50,30) at 4x zoom"
-    echo "  $0 center             # Center view on gNB"
-    echo "  $0 interactive        # Start keyboard navigation"
+    echo "  $0 add 20 15 10 'gNB_East'   # Add gNB at (20,15,10) named gNB_East"
+    echo "  $0 move 1 30 20 10           # Move gNB 1 to new position"
+    echo "  $0 update 0 tx_power=40      # Set gNB 0 power to 40 dBm"
+    echo "  $0 combine sinr              # Switch to SINR view"
+    echo "  $0 center 2                  # Center view on gNB 2"
 }
 
-# View control functions
+# ============================================================================
+# Multi-gNB Functions
+# ============================================================================
+
+add_gnb() {
+    local x=$1
+    local y=$2
+    local z=$3
+    local name=${4:-""}
+    
+    echo "Adding gNB at ($x, $y, $z)${name:+ named '$name'}..."
+    ign topic -t $TOPIC_ADD_GNB -m ignition.msgs.Pose \
+        -p "name: '$name', position: {x: $x, y: $y, z: $z}"
+}
+
+remove_gnb() {
+    local id=$1
+    echo "Removing gNB [$id]..."
+    ign topic -t $TOPIC_REMOVE_GNB -m ignition.msgs.Int32 -p "data: $id"
+}
+
+move_gnb() {
+    local id=$1
+    local x=$2
+    local y=$3
+    local z=$4
+    echo "Moving gNB [$id] to ($x, $y, $z)..."
+    ign topic -t $TOPIC_MOVE_GNB -m ignition.msgs.Pose \
+        -p "name: '$id', position: {x: $x, y: $y, z: $z}"
+}
+
+enable_gnb() {
+    local id=$1
+    echo "Enabling gNB [$id]..."
+    ign topic -t $TOPIC_ENABLE_GNB -m ignition.msgs.Int32 -p "data: $id"
+}
+
+disable_gnb() {
+    local id=$1
+    echo "Disabling gNB [$id]..."
+    ign topic -t $TOPIC_DISABLE_GNB -m ignition.msgs.Int32 -p "data: $id"
+}
+
+update_gnb() {
+    local id=$1
+    local params=$2
+    echo "Updating gNB [$id]: $params"
+    ign topic -t $TOPIC_UPDATE_GNB -m ignition.msgs.StringMsg \
+        -p "data: \"id=$id;$params\""
+}
+
+list_gnbs() {
+    echo "Requesting gNB list..."
+    
+    # Start listener in background FIRST, then send request
+    # This ensures we catch the response
+    (
+        # Timeout after 2 seconds if no response
+        timeout 2 ign topic -e -t $TOPIC_GNB_LIST -n 1 2>/dev/null | grep -oP 'data: "\K[^"]+' | tr ';' '\n' | while read line; do
+            if [ ! -z "$line" ]; then
+                echo "  $line"
+            fi
+        done
+    ) &
+    LISTENER_PID=$!
+    
+    # Small delay to ensure listener is ready
+    sleep 0.1
+    
+    # Send the request
+    ign topic -t $TOPIC_LIST_GNBS -m ignition.msgs.Empty -p ""
+    
+    # Wait for listener to complete
+    wait $LISTENER_PID 2>/dev/null
+    
+    echo ""
+}
+
+watch_gnb_list() {
+    echo "Watching gNB list (Ctrl+C to stop)..."
+    ign topic -e -t $TOPIC_GNB_LIST | while read -r line; do
+        info=$(echo "$line" | grep -oP 'data: "\K[^"]+')
+        if [ ! -z "$info" ]; then
+            clear
+            echo "=== gNB List [$(date '+%H:%M:%S')] ==="
+            echo ""
+            echo "$info" | tr ';' '\n' | while read item; do
+                if [ ! -z "$item" ]; then
+                    echo "  $item"
+                fi
+            done
+        fi
+    done
+}
+
+set_combine_mode() {
+    local mode=$1
+    echo "Setting signal combination mode to: $mode"
+    ign topic -t $TOPIC_COMBINE_MODE -m ignition.msgs.StringMsg -p "data: \"$mode\""
+}
+
+# ============================================================================
+# Demo Functions
+# ============================================================================
+
+demo_multi() {
+    echo "Setting up multi-gNB demo..."
+    echo ""
+    
+    # Add three gNBs in a triangle pattern
+    echo "Adding gNB at (0, 0, 10) - Central..."
+    add_gnb 0 0 10 "Central"
+    sleep 0.5
+    
+    echo "Adding gNB at (25, 20, 12) - East..."
+    add_gnb 25 20 12 "East"
+    sleep 0.5
+    
+    echo "Adding gNB at (-20, 25, 10) - West..."
+    add_gnb -20 25 10 "West"
+    sleep 0.5
+    
+    echo ""
+    echo "Demo setup complete! Try:"
+    echo "  $0 list                    # See all gNBs"
+    echo "  $0 combine best_server     # View best server"
+    echo "  $0 combine sinr            # View SINR"
+    echo "  $0 query 10 10             # Query point between gNBs"
+    echo "  $0 disable 1               # Disable East gNB"
+}
+
+demo_interference() {
+    echo "Setting up interference analysis demo..."
+    echo ""
+    
+    # Add gNBs close together to show interference
+    echo "Adding co-located gNBs to demonstrate interference..."
+    add_gnb 0 0 10 "gNB_A"
+    sleep 0.3
+    add_gnb 15 0 10 "gNB_B"
+    sleep 0.3
+    add_gnb 7.5 13 10 "gNB_C"
+    sleep 0.3
+    
+    echo ""
+    echo "Switching to SINR view..."
+    set_combine_mode "sinr"
+    
+    echo ""
+    echo "Interference demo setup complete!"
+    echo "The heatmap now shows Signal-to-Interference-plus-Noise Ratio."
+    echo "Areas with low SINR (blue) indicate high interference."
+    echo ""
+    echo "Try:"
+    echo "  $0 combine best_server    # Switch to coverage view"
+    echo "  $0 combine sum_power      # Switch to total power view"
+    echo "  $0 update 1 tx_power=40   # Increase gNB_B power"
+}
+
+# ============================================================================
+# View Control Functions
+# ============================================================================
+
 zoom_in() {
     local amount=${1:-2}
     echo "Zooming in ($amount steps)..."
@@ -85,8 +268,6 @@ zoom_out() {
 set_zoom() {
     local level=$1
     echo "Setting zoom to ${level}x..."
-    # Calculate current zoom and send delta to reach target
-    # For simplicity, we use set_view instead
     ign topic -t $TOPIC_SET_VIEW -m ignition.msgs.Pose \
         -p "position: {x: 0, y: 0, z: $level}"
 }
@@ -108,8 +289,9 @@ goto_position() {
 }
 
 center_on_gnb() {
-    echo "Centering view on gNB..."
-    ign topic -t $TOPIC_CENTER_GNB -m ignition.msgs.Empty -p ""
+    local id=${1:-0}
+    echo "Centering view on gNB [$id]..."
+    ign topic -t $TOPIC_CENTER_GNB -m ignition.msgs.Int32 -p "data: $id"
 }
 
 reset_view() {
@@ -126,106 +308,10 @@ show_view_info() {
     done
 }
 
-watch_view_info() {
-    echo "Watching view info (Ctrl+C to stop)..."
-    echo ""
-    ign topic -e -t $TOPIC_VIEW_INFO | while read -r line; do
-        info=$(echo "$line" | grep -oP 'data: "\K[^"]+')
-        if [ ! -z "$info" ]; then
-            clear
-            echo "=== View Info [$(date '+%H:%M:%S')] ==="
-            echo ""
-            echo "$info" | tr ';' '\n' | while read item; do
-                if [ ! -z "$item" ]; then
-                    echo "  $item"
-                fi
-            done
-        fi
-    done
-}
+# ============================================================================
+# Model/Config Functions
+# ============================================================================
 
-# Interactive keyboard navigation
-interactive_mode() {
-    echo "=== Interactive Navigation Mode ==="
-    echo "Controls:"
-    echo "  W/S: Pan up/down"
-    echo "  A/D: Pan left/right"
-    echo "  +/=: Zoom in"
-    echo "  -/_: Zoom out"
-    echo "  C: Center on gNB"
-    echo "  R: Reset view"
-    echo "  V: Show current view"
-    echo "  Q: Quit"
-    echo ""
-    echo "Press keys to navigate (no Enter needed)..."
-    
-    # Save terminal settings and set to raw mode
-    old_stty=$(stty -g)
-    stty raw -echo
-    
-    pan_step=5
-    zoom_step=1
-    
-    while true; do
-        char=$(dd bs=1 count=1 2>/dev/null)
-        
-        case "$char" in
-            w|W)
-                stty "$old_stty"
-                pan_view 0 $pan_step
-                stty raw -echo
-                ;;
-            s|S)
-                stty "$old_stty"
-                pan_view 0 -$pan_step
-                stty raw -echo
-                ;;
-            a|A)
-                stty "$old_stty"
-                pan_view -$pan_step 0
-                stty raw -echo
-                ;;
-            d|D)
-                stty "$old_stty"
-                pan_view $pan_step 0
-                stty raw -echo
-                ;;
-            +|=)
-                stty "$old_stty"
-                zoom_in $zoom_step
-                stty raw -echo
-                ;;
-            -|_)
-                stty "$old_stty"
-                zoom_out $zoom_step
-                stty raw -echo
-                ;;
-            c|C)
-                stty "$old_stty"
-                center_on_gnb
-                stty raw -echo
-                ;;
-            r|R)
-                stty "$old_stty"
-                reset_view
-                stty raw -echo
-                ;;
-            v|V)
-                stty "$old_stty"
-                show_view_info
-                stty raw -echo
-                ;;
-            q|Q)
-                stty "$old_stty"
-                echo ""
-                echo "Exiting interactive mode."
-                exit 0
-                ;;
-        esac
-    done
-}
-
-# Original functions
 set_model() {
     local model=$1
     echo "Setting propagation model to: $model"
@@ -238,52 +324,17 @@ set_config() {
     ign topic -t $TOPIC_CONFIG -m ignition.msgs.StringMsg -p "data: \"$config\""
 }
 
-move_gnb() {
-    local x=$1
-    local y=$2
-    local z=$3
-    echo "Moving gNB to position: ($x, $y, $z)"
-    ign topic -t $TOPIC_SET_POSITION -m ignition.msgs.Pose \
-        -p "position: {x: $x, y: $y, z: $z}"
-}
-
 query_signal() {
     local x=$1
     local y=$2
-    local z=$3
+    local z=${3:-1.5}
     echo "Querying signal at position: ($x, $y, $z)"
-    
-    # Start listener in background BEFORE publishing
-    ign topic -e -t $TOPIC_QUERY_RESULT -n 1 2>/dev/null > /tmp/query_result.txt &
-    listener_pid=$!
-    
-    # Small delay to ensure subscriber is ready
-    sleep 0.1
-    
-    # Now publish the query
     ign topic -t $TOPIC_QUERY_POSITION -m ignition.msgs.Vector3d \
         -p "x: $x, y: $y, z: $z"
-    
-    # Wait for listener to receive (with timeout)
-    local timeout=3
-    local elapsed=0
-    while kill -0 $listener_pid 2>/dev/null && [ $elapsed -lt $timeout ]; do
-        sleep 0.1
-        elapsed=$((elapsed + 1))
-    done
-    
-    # Kill listener if still running (timeout)
-    kill $listener_pid 2>/dev/null
-    wait $listener_pid 2>/dev/null
-    
+    sleep 0.3
     echo ""
     echo "Query result:"
-    if [ -s /tmp/query_result.txt ]; then
-        cat /tmp/query_result.txt | grep -oP 'data: "\K[^"]+' | sed 's/\\n/\n/g'
-    else
-        echo "  No response received (timeout or plugin not running)"
-    fi
-    rm -f /tmp/query_result.txt
+    ign topic -e -t $TOPIC_QUERY_RESULT -n 1 2>/dev/null | grep -oP 'data: "\K[^"]+' | sed 's/\\n/\n/g'
 }
 
 listen_clicks() {
@@ -322,8 +373,74 @@ watch_status() {
     done
 }
 
-# Command dispatch
+# ============================================================================
+# Command Dispatch
+# ============================================================================
+
 case "$1" in
+    # Multi-gNB commands
+    add)
+        if [ -z "$2" ] || [ -z "$3" ] || [ -z "$4" ]; then
+            echo "Error: X, Y, Z coordinates required"
+            echo "Usage: $0 add <x> <y> <z> [name]"
+            exit 1
+        fi
+        add_gnb "$2" "$3" "$4" "$5"
+        ;;
+    remove)
+        if [ -z "$2" ]; then
+            echo "Error: gNB ID required"
+            exit 1
+        fi
+        remove_gnb "$2"
+        ;;
+    move)
+        if [ -z "$2" ] || [ -z "$3" ] || [ -z "$4" ] || [ -z "$5" ]; then
+            echo "Error: ID and X, Y, Z coordinates required"
+            echo "Usage: $0 move <id> <x> <y> <z>"
+            exit 1
+        fi
+        move_gnb "$2" "$3" "$4" "$5"
+        ;;
+    enable)
+        if [ -z "$2" ]; then echo "Error: gNB ID required"; exit 1; fi
+        enable_gnb "$2"
+        ;;
+    disable)
+        if [ -z "$2" ]; then echo "Error: gNB ID required"; exit 1; fi
+        disable_gnb "$2"
+        ;;
+    update)
+        if [ -z "$2" ] || [ -z "$3" ]; then
+            echo "Error: ID and parameters required"
+            echo "Usage: $0 update <id> <params>"
+            echo "Example: $0 update 0 tx_power=35;tx_gain=12"
+            exit 1
+        fi
+        update_gnb "$2" "$3"
+        ;;
+    list)
+        list_gnbs
+        ;;
+    watch_list)
+        watch_gnb_list
+        ;;
+    combine)
+        if [ -z "$2" ]; then
+            echo "Error: Mode required (best_server, sum_power, sinr)"
+            exit 1
+        fi
+        set_combine_mode "$2"
+        ;;
+    
+    # Demo commands
+    demo_multi)
+        demo_multi
+        ;;
+    demo_interference)
+        demo_interference
+        ;;
+    
     # View controls
     zoom_in)
         zoom_in "${2:-2}"
@@ -333,7 +450,7 @@ case "$1" in
         ;;
     zoom)
         if [ -z "$2" ]; then
-            echo "Error: Zoom level required (e.g., 2.0 for 2x zoom)"
+            echo "Error: Zoom level required"
             exit 1
         fi
         set_zoom "$2"
@@ -341,7 +458,6 @@ case "$1" in
     pan)
         if [ -z "$2" ] || [ -z "$3" ]; then
             echo "Error: dx and dy required"
-            echo "Usage: $0 pan <dx> <dy>"
             exit 1
         fi
         pan_view "$2" "$3"
@@ -349,13 +465,12 @@ case "$1" in
     goto)
         if [ -z "$2" ] || [ -z "$3" ]; then
             echo "Error: X and Y coordinates required"
-            echo "Usage: $0 goto <x> <y> [zoom]"
             exit 1
         fi
         goto_position "$2" "$3" "${4:-0}"
         ;;
     center)
-        center_on_gnb
+        center_on_gnb "${2:-0}"
         ;;
     reset)
         reset_view
@@ -363,13 +478,8 @@ case "$1" in
     view)
         show_view_info
         ;;
-    watch_view)
-        watch_view_info
-        ;;
-    interactive)
-        interactive_mode
-        ;;
-    # Original commands
+    
+    # Model/config
     model)
         if [ -z "$2" ]; then
             echo "Error: Model name required"
@@ -383,29 +493,6 @@ case "$1" in
             exit 1
         fi
         set_config "$2"
-        ;;
-    move)
-        if [ -z "$2" ] || [ -z "$3" ] || [ -z "$4" ]; then
-            echo "Error: X, Y, Z coordinates required"
-            exit 1
-        fi
-        move_gnb "$2" "$3" "$4"
-        ;;
-    query)
-        if [ -z "$2" ] || [ -z "$3" ] || [ -z "$4" ]; then
-            echo "Error: X, Y, Z coordinates required"
-            exit 1
-        fi
-        query_signal "$2" "$3" "$4"
-        ;;
-    listen_clicks)
-        listen_clicks
-        ;;
-    status)
-        show_status
-        ;;
-    watch_status)
-        watch_status
         ;;
     power)
         if [ -z "$2" ]; then echo "Error: Power value required"; exit 1; fi
@@ -426,6 +513,27 @@ case "$1" in
             *) echo "Error: Use 'on' or 'off'"; exit 1 ;;
         esac
         ;;
+    
+    # Interactive
+    query)
+        if [ -z "$2" ] || [ -z "$3" ]; then
+            echo "Error: X and Y coordinates required"
+            exit 1
+        fi
+        query_signal "$2" "$3" "${4:-1.5}"
+        ;;
+    listen_clicks)
+        listen_clicks
+        ;;
+    
+    # Status
+    status)
+        show_status
+        ;;
+    watch_status)
+        watch_status
+        ;;
+    
     help|--help|-h)
         show_help
         ;;
