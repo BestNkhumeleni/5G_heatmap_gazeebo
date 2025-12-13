@@ -1,0 +1,95 @@
+================================================================================
+        RF PROPAGATION MODEL COMPARISON REPORT
+        Generated for Conference Paper Analysis
+================================================================================
+
+Report generated: Sat 13 Dec 2025 16:05:41 SAST
+Output directory: /home/best/Desktop/5G_heatmap_gazeebo/comparison_results/20251213_155909
+
+--------------------------------------------------------------------------------
+SCENARIO: Open Field (Rural)
+--------------------------------------------------------------------------------
+
+Model                      | Mean(dBm) | Std   | Min    | Max    | Coverage Quality Distribution
+---------------------------|-----------|-------|--------|--------|--------------------------------
+Free Space Path Loss       |    -32.98 |  4.45 | -39.43 | -25.21 | E:100% G:0% F:0% P:0% N:0%
+Hybrid (3GPP + RT)         |    -34.31 |  4.67 | -41.09 | -26.15 | E:100% G:0% F:0% P:0% N:0%
+3GPP TR 38.901 UMi         |    -34.31 |  4.67 | -41.09 | -26.15 | E:100% G:0% F:0% P:0% N:0%
+Ray Tracing                |    -32.98 |  4.45 | -39.43 | -25.21 | E:100% G:0% F:0% P:0% N:0%
+3GPP TR 38.901 UMa         |    -31.29 |  4.89 | -38.39 | -22.75 | E:100% G:0% F:0% P:0% N:0%
+
+--------------------------------------------------------------------------------
+SCENARIO: Dense Urban
+--------------------------------------------------------------------------------
+
+Model                      | Mean(dBm) | Std   | Min    | Max    | Coverage Quality Distribution
+---------------------------|-----------|-------|--------|--------|--------------------------------
+Free Space Path Loss       |    -53.44 | 35.18 | -150.00 | -32.95 | E:80% G:10% F:0% P:0% N:10%
+Hybrid (3GPP + RT)         |    -48.99 | 33.89 | -150.00 | -34.28 | E:90% G:0% F:0% P:0% N:10%
+3GPP TR 38.901 UMi         |    -57.64 | 36.58 | -150.00 | -34.28 | E:70% G:10% F:10% P:0% N:10%
+Ray Tracing                |    -47.31 | 34.48 | -150.00 | -32.95 | E:90% G:0% F:0% P:0% N:10%
+3GPP TR 38.901 UMa         |    -54.95 | 37.29 | -150.00 | -31.26 | E:80% G:0% F:10% P:0% N:10%
+
+--------------------------------------------------------------------------------
+SCENARIO: Street Canyon (UMi)
+--------------------------------------------------------------------------------
+
+Model                      | Mean(dBm) | Std   | Min    | Max    | Coverage Quality Distribution
+---------------------------|-----------|-------|--------|--------|--------------------------------
+Free Space Path Loss       |    -61.05 | 45.49 | -150.00 | -23.61 | E:80% G:0% F:0% P:0% N:20%
+Hybrid (3GPP + RT)         |    -56.77 | 46.82 | -150.00 | -24.47 | E:80% G:0% F:0% P:0% N:20%
+3GPP TR 38.901 UMi         |    -65.97 | 44.62 | -150.00 | -24.47 | E:70% G:10% F:0% P:0% N:20%
+Ray Tracing                |    -54.64 | 47.86 | -150.00 | -23.17 | E:80% G:0% F:0% P:0% N:20%
+3GPP TR 38.901 UMa         |    -63.31 | 45.83 | -150.00 | -20.99 | E:80% G:0% F:0% P:0% N:20%
+
+--------------------------------------------------------------------------------
+SCENARIO: Elevated Macro (UMa)
+--------------------------------------------------------------------------------
+
+Model                      | Mean(dBm) | Std   | Min    | Max    | Coverage Quality Distribution
+---------------------------|-----------|-------|--------|--------|--------------------------------
+Free Space Path Loss       |    -32.85 | 39.55 | -150.00 | -15.93 | E:90% G:0% F:0% P:0% N:10%
+Hybrid (3GPP + RT)         |    -32.74 | 39.15 | -150.00 | -17.41 | E:90% G:0% F:0% P:0% N:10%
+3GPP TR 38.901 UMi         |    -35.68 | 39.52 | -150.00 | -17.41 | E:90% G:0% F:0% P:0% N:10%
+Ray Tracing                |    -30.37 | 39.97 | -150.00 | -13.95 | E:90% G:0% F:0% P:0% N:10%
+3GPP TR 38.901 UMa         |    -33.11 | 40.31 | -150.00 | -14.54 | E:90% G:0% F:0% P:0% N:10%
+
+--------------------------------------------------------------------------------
+SCENARIO: Indoor-Outdoor
+--------------------------------------------------------------------------------
+
+Model                      | Mean(dBm) | Std   | Min    | Max    | Coverage Quality Distribution
+---------------------------|-----------|-------|--------|--------|--------------------------------
+Free Space Path Loss       |    -76.00 | 49.53 | -150.00 | -29.65 | E:70% G:0% F:0% P:0% N:30%
+Hybrid (3GPP + RT)         |    -69.76 | 52.66 | -150.00 | -30.81 | E:70% G:0% F:0% P:0% N:30%
+3GPP TR 38.901 UMi         |    -82.90 | 46.93 | -150.00 | -30.81 | E:50% G:20% F:0% P:0% N:30%
+Ray Tracing                |    -68.53 | 53.54 | -150.00 | -27.83 | E:70% G:0% F:0% P:0% N:30%
+3GPP TR 38.901 UMa         |    -80.68 | 48.31 | -150.00 | -27.63 | E:60% G:10% F:0% P:0% N:30%
+
+
+================================================================================
+INTERPRETATION GUIDE
+================================================================================
+
+Signal Quality Thresholds:
+  Excellent (E): >= -70 dBm   - High throughput, reliable connection
+  Good (G):      >= -85 dBm   - Good performance for most applications
+  Fair (F):      >= -100 dBm  - Usable but may have reduced throughput
+  Poor (P):      >= -115 dBm  - Marginal coverage, possible dropouts
+  No Service (N): < -115 dBm  - Below sensitivity threshold
+
+Model Characteristics:
+  - Free Space Path Loss: Theoretical baseline, no obstacles
+  - 3GPP UMi: Optimized for street-level small cells (< 10m height)
+  - 3GPP UMa: Optimized for elevated macro cells (25-35m height)
+  - Ray Tracing: Accounts for reflections, computationally intensive
+  - Hybrid: Combines 3GPP statistical model with ray tracing multipath
+
+Scenario Selection Guidelines:
+  - Open Field: Use FSPL or 3GPP models (should converge)
+  - Dense Urban: Hybrid or Ray Tracing recommended
+  - Street Canyon: 3GPP UMi optimal
+  - Elevated Macro: 3GPP UMa optimal
+  - Indoor-Outdoor: Hybrid recommended for wall penetration
+
+================================================================================

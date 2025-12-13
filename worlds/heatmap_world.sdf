@@ -15,52 +15,24 @@
     <plugin filename="ignition-gazebo-user-commands-system"
             name="ignition::gazebo::systems::UserCommands"/>
 
-    <!-- 
-      Heatmap Plugin with Propagation Model Configuration
-      
-      Available propagation models:
-        - free_space / fspl      : Simple Free Space Path Loss
-        - 3gpp_umi / umi         : 3GPP TR 38.901 Urban Micro
-        - 3gpp_uma / uma         : 3GPP TR 38.901 Urban Macro
-        - ray_tracing / raytracing : Ray Tracing with reflections
-        - hybrid                 : Combined 3GPP + Ray Tracing
-      
-      Runtime control via topics:
-        ign topic -t /gnb/heatmap/set_model -m ignition.msgs.StringMsg -p 'data: "ray_tracing"'
-        ign topic -t /gnb/heatmap/config -m ignition.msgs.StringMsg -p 'data: "tx_power=40;wall_loss=20"'
-        ign topic -e -t /gnb/heatmap/status
-    -->
     <plugin filename="libHeatmapPlugin.so"
             name="heatmap_plugin::HeatmapPlugin">
-      <!-- Grid configuration -->
       <grid_w>128</grid_w>
       <grid_h>128</grid_h>
       <cell_size>0.5</cell_size>
-      
-      <!-- RF parameters -->
-      <frequency_hz>3500000000</frequency_hz>  <!-- 3.5 GHz (5G n78 band) -->
-      <tx_dbm>30.0</tx_dbm>                    <!-- 1W transmit power -->
-      <tx_height>10.0</tx_height>              <!-- gNB antenna height -->
-      <rx_height>1.5</rx_height>               <!-- UE height (pedestrian) -->
-      <tx_gain_dbi>8.0</tx_gain_dbi>           <!-- Antenna gain -->
+      <frequency_hz>3500000000</frequency_hz>
+      <tx_dbm>30.0</tx_dbm>
+      <tx_height>10.0</tx_height>
+      <rx_height>1.5</rx_height>
+      <tx_gain_dbi>8.0</tx_gain_dbi>
       <rx_gain_dbi>0.0</rx_gain_dbi>
-      
-      <!-- gNB position -->
       <gnb_pose>0 0 10 0 0 0</gnb_pose>
-      
-      <!-- Propagation model: free_space, 3gpp_umi, 3gpp_uma, ray_tracing, hybrid -->
       <propagation_model>3gpp_umi</propagation_model>
-      
-      <!-- Material/obstacle properties -->
-      <wall_loss_db>15.0</wall_loss_db>        <!-- Penetration loss per wall -->
-      <reflection_coeff>0.7</reflection_coeff>  <!-- For ray tracing -->
-      
-      <!-- Shadowing (log-normal fading) -->
+      <wall_loss_db>15.0</wall_loss_db>
+      <reflection_coeff>0.7</reflection_coeff>
       <include_shadowing>false</include_shadowing>
       <shadowing_std_los>4.0</shadowing_std_los>
       <shadowing_std_nlos>7.82</shadowing_std_nlos>
-      
-      <!-- Ray tracing options -->
       <max_reflections>2</max_reflections>
       <max_diffractions>1</max_diffractions>
     </plugin>
@@ -146,7 +118,7 @@
       <direction>-0.5 0.1 -0.9</direction>
     </light>
 
-    <!-- Ground Plane -->
+    <!-- Ground Plane - Grey -->
     <model name="ground_plane">
       <static>true</static>
       <link name="link">
@@ -160,8 +132,10 @@
             <plane><normal>0 0 1</normal><size>200 200</size></plane>
           </geometry>
           <material>
-            <ambient>0.7 0.7 0.7 1</ambient>
-            <diffuse>0.7 0.7 0.7 1</diffuse>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
           </material>
         </visual>
       </link>
@@ -174,19 +148,27 @@
       <link name="tower_link">
         <visual name="pole">
           <geometry><cylinder><radius>0.15</radius><length>10</length></cylinder></geometry>
-          <material><ambient>0.4 0.4 0.4 1</ambient></material>
+          <material>
+            <ambient>0.3 0.3 0.3 1</ambient>
+            <diffuse>0.3 0.3 0.3 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
         </visual>
         <visual name="antenna">
           <pose>0 0 5.5 0 0 0</pose>
           <geometry><box><size>0.4 0.15 0.8</size></box></geometry>
-          <material><ambient>0.8 0.2 0.2 1</ambient></material>
+          <material>
+            <ambient>0.9 0.1 0.1 1</ambient>
+            <diffuse>0.9 0.1 0.1 1</diffuse>
+            <specular>0.2 0.2 0.2 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
         </visual>
       </link>
     </model>
 
-    <!-- Urban environment buildings -->
-    
-    <!-- Large office building -->
+    <!-- Large office building - Blue -->
     <model name="building_office">
       <static>false</static>
       <pose>15 8 4 0 0 0</pose>
@@ -196,12 +178,17 @@
         </collision>
         <visual name="visual">
           <geometry><box><size>12 8 8</size></box></geometry>
-          <material><ambient>0.5 0.5 0.6 1</ambient></material>
+          <material>
+            <ambient>0.2 0.4 0.7 1</ambient>
+            <diffuse>0.2 0.4 0.7 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
         </visual>
       </link>
     </model>
 
-    <!-- Residential tower -->
+    <!-- Residential tower - Terracotta/Orange -->
     <model name="building_residential">
       <static>false</static>
       <pose>-12 12 7.5 0 0 0</pose>
@@ -211,12 +198,17 @@
         </collision>
         <visual name="visual">
           <geometry><box><size>6 6 15</size></box></geometry>
-          <material><ambient>0.6 0.4 0.3 1</ambient></material>
+          <material>
+            <ambient>0.8 0.45 0.25 1</ambient>
+            <diffuse>0.8 0.45 0.25 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
         </visual>
       </link>
     </model>
 
-    <!-- Shopping center -->
+    <!-- Shopping center - Green -->
     <model name="building_shopping">
       <static>false</static>
       <pose>8 -15 2.5 0 0 0</pose>
@@ -226,12 +218,17 @@
         </collision>
         <visual name="visual">
           <geometry><box><size>16 10 5</size></box></geometry>
-          <material><ambient>0.4 0.5 0.4 1</ambient></material>
+          <material>
+            <ambient>0.3 0.6 0.4 1</ambient>
+            <diffuse>0.3 0.6 0.4 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
         </visual>
       </link>
     </model>
 
-    <!-- Small building cluster -->
+    <!-- Small building cluster - Yellow -->
     <model name="building_small1">
       <static>false</static>
       <pose>-18 -10 2 0 0 0</pose>
@@ -241,11 +238,17 @@
         </collision>
         <visual name="visual">
           <geometry><box><size>4 4 4</size></box></geometry>
-          <material><ambient>0.5 0.45 0.4 1</ambient></material>
+          <material>
+            <ambient>0.85 0.75 0.3 1</ambient>
+            <diffuse>0.85 0.75 0.3 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
         </visual>
       </link>
     </model>
 
+    <!-- Small building 2 - Cyan -->
     <model name="building_small2">
       <static>false</static>
       <pose>-22 -6 3 0 0 0</pose>
@@ -255,12 +258,17 @@
         </collision>
         <visual name="visual">
           <geometry><box><size>5 5 6</size></box></geometry>
-          <material><ambient>0.55 0.5 0.45 1</ambient></material>
+          <material>
+            <ambient>0.3 0.7 0.75 1</ambient>
+            <diffuse>0.3 0.7 0.75 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
         </visual>
       </link>
     </model>
 
-    <!-- Tall narrow building (creates interesting shadow) -->
+    <!-- Tall narrow building - Purple -->
     <model name="building_tower">
       <static>false</static>
       <pose>20 -5 10 0 0 0</pose>
@@ -270,12 +278,17 @@
         </collision>
         <visual name="visual">
           <geometry><box><size>4 4 20</size></box></geometry>
-          <material><ambient>0.3 0.3 0.5 1</ambient></material>
+          <material>
+            <ambient>0.5 0.3 0.7 1</ambient>
+            <diffuse>0.5 0.3 0.7 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
         </visual>
       </link>
     </model>
 
-    <!-- L-shaped building -->
+    <!-- L-shaped building - Pink/Salmon -->
     <model name="building_lshaped">
       <static>false</static>
       <pose>-8 -20 0 0 0 0</pose>
@@ -286,7 +299,12 @@
         </collision>
         <visual name="visual">
           <geometry><box><size>10 4 6</size></box></geometry>
-          <material><ambient>0.5 0.4 0.5 1</ambient></material>
+          <material>
+            <ambient>0.85 0.5 0.55 1</ambient>
+            <diffuse>0.85 0.5 0.55 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
         </visual>
       </link>
       <link name="side_wing">
@@ -296,7 +314,12 @@
         </collision>
         <visual name="visual">
           <geometry><box><size>4 4 6</size></box></geometry>
-          <material><ambient>0.5 0.4 0.5 1</ambient></material>
+          <material>
+            <ambient>0.85 0.5 0.55 1</ambient>
+            <diffuse>0.85 0.5 0.55 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
         </visual>
       </link>
     </model>

@@ -44,6 +44,7 @@
       <direction>-0.5 0.1 -0.9</direction>
     </light>
 
+    <!-- Ground plane - Grey -->
     <model name="ground_plane">
       <static>true</static>
       <link name="link">
@@ -52,7 +53,12 @@
         </collision>
         <visual name="visual">
           <geometry><plane><normal>0 0 1</normal><size>150 150</size></plane></geometry>
-          <material><ambient>0.6 0.6 0.55 1</ambient></material>
+          <material>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
         </visual>
       </link>
     </model>
@@ -64,58 +70,95 @@
       <link name="link">
         <visual name="post">
           <geometry><cylinder><radius>0.1</radius><length>6</length></cylinder></geometry>
-          <material><ambient>0.3 0.3 0.3 1</ambient></material>
+          <material>
+            <ambient>0.3 0.3 0.3 1</ambient>
+            <diffuse>0.3 0.3 0.3 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
         </visual>
         <visual name="antenna">
           <pose>0 0 3.5 0 0 0</pose>
           <geometry><box><size>0.25 0.1 0.5</size></box></geometry>
-          <material><ambient>0.8 0.2 0.2 1</ambient></material>
+          <material>
+            <ambient>0.9 0.1 0.1 1</ambient>
+            <diffuse>0.9 0.1 0.1 1</diffuse>
+            <specular>0.2 0.2 0.2 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
         </visual>
       </link>
     </model>
 
-    <!-- U-shaped building with courtyard (tests penetration + diffraction) -->
-    <!-- North wing -->
+    <!-- U-shaped building - North wing - Teal -->
     <model name="building_north_wing">
       <static>true</static>
       <pose>10 20 5 0 0 0</pose>
       <link name="link">
         <collision name="collision"><geometry><box><size>30 6 10</size></box></geometry></collision>
-        <visual name="visual"><geometry><box><size>30 6 10</size></box></geometry>
-          <material><ambient>0.6 0.55 0.5 1</ambient></material></visual>
+        <visual name="visual">
+          <geometry><box><size>30 6 10</size></box></geometry>
+          <material>
+            <ambient>0.25 0.65 0.7 1</ambient>
+            <diffuse>0.25 0.65 0.7 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
       </link>
     </model>
 
-    <!-- South wing -->
+    <!-- South wing - Teal -->
     <model name="building_south_wing">
       <static>true</static>
       <pose>10 -20 5 0 0 0</pose>
       <link name="link">
         <collision name="collision"><geometry><box><size>30 6 10</size></box></geometry></collision>
-        <visual name="visual"><geometry><box><size>30 6 10</size></box></geometry>
-          <material><ambient>0.6 0.55 0.5 1</ambient></material></visual>
+        <visual name="visual">
+          <geometry><box><size>30 6 10</size></box></geometry>
+          <material>
+            <ambient>0.25 0.65 0.7 1</ambient>
+            <diffuse>0.25 0.65 0.7 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
       </link>
     </model>
 
-    <!-- East wing (closes courtyard) -->
+    <!-- East wing - Slightly different teal -->
     <model name="building_east_wing">
       <static>true</static>
       <pose>22 0 5 0 0 0</pose>
       <link name="link">
         <collision name="collision"><geometry><box><size>6 34 10</size></box></geometry></collision>
-        <visual name="visual"><geometry><box><size>6 34 10</size></box></geometry>
-          <material><ambient>0.55 0.55 0.55 1</ambient></material></visual>
+        <visual name="visual">
+          <geometry><box><size>6 34 10</size></box></geometry>
+          <material>
+            <ambient>0.3 0.7 0.65 1</ambient>
+            <diffuse>0.3 0.7 0.65 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
       </link>
     </model>
 
-    <!-- Interior walls within courtyard building -->
+    <!-- Interior walls - Light beige -->
     <model name="interior_wall_1">
       <static>true</static>
       <pose>8 8 2.5 0 0 0</pose>
       <link name="link">
         <collision name="collision"><geometry><box><size>0.3 10 5</size></box></geometry></collision>
-        <visual name="visual"><geometry><box><size>0.3 10 5</size></box></geometry>
-          <material><ambient>0.7 0.7 0.65 1</ambient></material></visual>
+        <visual name="visual">
+          <geometry><box><size>0.3 10 5</size></box></geometry>
+          <material>
+            <ambient>0.85 0.8 0.7 1</ambient>
+            <diffuse>0.85 0.8 0.7 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
       </link>
     </model>
 
@@ -124,51 +167,87 @@
       <pose>8 -8 2.5 0 0 0</pose>
       <link name="link">
         <collision name="collision"><geometry><box><size>0.3 10 5</size></box></geometry></collision>
-        <visual name="visual"><geometry><box><size>0.3 10 5</size></box></geometry>
-          <material><ambient>0.7 0.7 0.65 1</ambient></material></visual>
+        <visual name="visual">
+          <geometry><box><size>0.3 10 5</size></box></geometry>
+          <material>
+            <ambient>0.85 0.8 0.7 1</ambient>
+            <diffuse>0.85 0.8 0.7 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
       </link>
     </model>
 
-    <!-- Separate standalone building (for shadow/NLOS testing) -->
+    <!-- Standalone building - Coral/Salmon -->
     <model name="standalone_bldg">
       <static>true</static>
       <pose>-5 -25 4 0 0 0</pose>
       <link name="link">
         <collision name="collision"><geometry><box><size>10 8 8</size></box></geometry></collision>
-        <visual name="visual"><geometry><box><size>10 8 8</size></box></geometry>
-          <material><ambient>0.5 0.5 0.55 1</ambient></material></visual>
+        <visual name="visual">
+          <geometry><box><size>10 8 8</size></box></geometry>
+          <material>
+            <ambient>0.9 0.55 0.5 1</ambient>
+            <diffuse>0.9 0.55 0.5 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
       </link>
     </model>
 
-    <!-- Low wall / fence (partial blockage) -->
+    <!-- Low wall / fence - Dark brown -->
     <model name="low_wall">
       <static>true</static>
       <pose>-8 10 1 0 0 0</pose>
       <link name="link">
         <collision name="collision"><geometry><box><size>1 20 2</size></box></geometry></collision>
-        <visual name="visual"><geometry><box><size>1 20 2</size></box></geometry>
-          <material><ambient>0.5 0.45 0.4 1</ambient></material></visual>
+        <visual name="visual">
+          <geometry><box><size>1 20 2</size></box></geometry>
+          <material>
+            <ambient>0.45 0.35 0.25 1</ambient>
+            <diffuse>0.45 0.35 0.25 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
       </link>
     </model>
 
-    <!-- Additional structures for multipath -->
+    <!-- Shed 1 - Yellow/Gold -->
     <model name="shed_1">
       <static>true</static>
       <pose>-25 15 1.5 0 0 0</pose>
       <link name="link">
         <collision name="collision"><geometry><box><size>4 4 3</size></box></geometry></collision>
-        <visual name="visual"><geometry><box><size>4 4 3</size></box></geometry>
-          <material><ambient>0.55 0.5 0.45 1</ambient></material></visual>
+        <visual name="visual">
+          <geometry><box><size>4 4 3</size></box></geometry>
+          <material>
+            <ambient>0.75 0.65 0.35 1</ambient>
+            <diffuse>0.75 0.65 0.35 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
       </link>
     </model>
 
+    <!-- Shed 2 - Purple -->
     <model name="shed_2">
       <static>true</static>
       <pose>-25 -15 1.5 0 0 0</pose>
       <link name="link">
         <collision name="collision"><geometry><box><size>4 4 3</size></box></geometry></collision>
-        <visual name="visual"><geometry><box><size>4 4 3</size></box></geometry>
-          <material><ambient>0.55 0.5 0.45 1</ambient></material></visual>
+        <visual name="visual">
+          <geometry><box><size>4 4 3</size></box></geometry>
+          <material>
+            <ambient>0.6 0.45 0.7 1</ambient>
+            <diffuse>0.6 0.45 0.7 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
       </link>
     </model>
 

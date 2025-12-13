@@ -13,19 +13,29 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from pathlib import Path
 
-# Configure matplotlib for publication quality
+# Configure matplotlib for publication quality - matched to heatmap sizing
 plt.rcParams.update({
-    'font.size': 10,
+    'font.size': 20,
     'font.family': 'serif',
-    'axes.labelsize': 11,
-    'axes.titlesize': 12,
-    'legend.fontsize': 9,
-    'xtick.labelsize': 9,
-    'ytick.labelsize': 9,
-    'figure.figsize': (7, 5),
+    'font.weight': 'bold',
+    'axes.labelsize': 24,
+    'axes.labelweight': 'bold',
+    'axes.titlesize': 32,
+    'axes.titleweight': 'bold',
+    'legend.fontsize': 22,
+    'xtick.labelsize': 20,
+    'ytick.labelsize': 20,
+    'figure.figsize': (16, 10),
     'figure.dpi': 150,
     'savefig.dpi': 300,
     'savefig.bbox': 'tight',
+    'axes.linewidth': 2,
+    'xtick.major.width': 2,
+    'ytick.major.width': 2,
+    'xtick.major.size': 6,
+    'ytick.major.size': 6,
+    'lines.linewidth': 2.5,
+    'lines.markersize': 10,
 })
 
 # Model display names and colors
@@ -83,7 +93,7 @@ def load_summary_data(results_dir):
 
 def plot_signal_vs_distance(df, output_dir):
     """Plot signal strength vs distance for each scenario."""
-    fig, axes = plt.subplots(2, 3, figsize=(12, 8))
+    fig, axes = plt.subplots(2, 3, figsize=(20, 14))
     axes = axes.flatten()
     
     scenarios = df['scenario'].unique()
@@ -100,13 +110,14 @@ def plot_signal_vs_distance(df, output_dir):
             if not model_data.empty:
                 ax.scatter(model_data['distance_m'], model_data['signal_dbm'],
                           label=config['name'], color=config['color'],
-                          marker=config['marker'], alpha=0.7, s=50)
+                          marker=config['marker'], alpha=0.8, s=120, edgecolors='black', linewidths=0.8)
         
         scenario_name = SCENARIO_CONFIG.get(scenario, {}).get('name', scenario)
-        ax.set_title(scenario_name)
-        ax.set_xlabel('Distance (m)')
-        ax.set_ylabel('Signal Strength (dBm)')
-        ax.grid(True, alpha=0.3)
+        ax.set_title(scenario_name, fontweight='bold', fontsize=24)
+        ax.set_xlabel('Distance (m)', fontweight='bold', fontsize=20)
+        ax.set_ylabel('Signal Strength (dBm)', fontweight='bold', fontsize=20)
+        ax.tick_params(axis='both', labelsize=16)
+        ax.grid(True, alpha=0.3, linewidth=1.2)
         ax.set_ylim(-130, -30)
         
         # Add threshold lines
@@ -120,9 +131,10 @@ def plot_signal_vs_distance(df, output_dir):
     # Add legend
     handles = [mpatches.Patch(color=c['color'], label=c['name']) 
                for c in MODEL_CONFIG.values()]
-    fig.legend(handles=handles, loc='center right', bbox_to_anchor=(1.0, 0.5))
+    fig.legend(handles=handles, loc='center right', bbox_to_anchor=(1.0, 0.5),
+               fontsize=18, frameon=True, fancybox=True)
     
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0, 0.87, 1])
     plt.savefig(output_dir / 'signal_vs_distance.pdf')
     plt.savefig(output_dir / 'signal_vs_distance.png')
     plt.close()
@@ -148,24 +160,27 @@ def plot_model_comparison_heatmap(summary_df, output_dir):
     pivot.columns = [MODEL_CONFIG[m]['name'] for m in pivot.columns]
     pivot.index = [SCENARIO_CONFIG[s]['name'] for s in pivot.index]
     
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(16, 10))
     
     im = ax.imshow(pivot.values, cmap='RdYlGn', aspect='auto', vmin=-120, vmax=-50)
     
     ax.set_xticks(range(len(pivot.columns)))
     ax.set_yticks(range(len(pivot.index)))
-    ax.set_xticklabels(pivot.columns, rotation=45, ha='right')
-    ax.set_yticklabels(pivot.index)
+    ax.set_xticklabels(pivot.columns, rotation=45, ha='right', fontweight='bold', fontsize=24)
+    ax.set_yticklabels(pivot.index, fontweight='bold', fontsize=24)
     
     # Add values
     for i in range(len(pivot.index)):
         for j in range(len(pivot.columns)):
             val = pivot.values[i, j]
             color = 'white' if val < -90 else 'black'
-            ax.text(j, i, f'{val:.1f}', ha='center', va='center', color=color, fontsize=9)
+            ax.text(j, i, f'{val:.1f}', ha='center', va='center', color=color, 
+                   fontsize=22, fontweight='bold')
     
-    plt.colorbar(im, ax=ax, label='Mean Signal Strength (dBm)')
-    ax.set_title('Propagation Model Performance Comparison')
+    cbar = plt.colorbar(im, ax=ax)
+    cbar.set_label('Mean Signal Strength (dBm)', fontweight='bold', fontsize=24)
+    cbar.ax.tick_params(labelsize=20)
+    ax.set_title('Propagation Model Performance Comparison', fontweight='bold', fontsize=32)
     
     plt.tight_layout()
     plt.savefig(output_dir / 'model_comparison_heatmap.pdf')
@@ -186,7 +201,7 @@ def plot_coverage_distribution(summary_df, output_dir):
     scenarios = list(SCENARIO_CONFIG.keys())
     models = list(MODEL_CONFIG.keys())
     
-    fig, axes = plt.subplots(1, len(scenarios), figsize=(15, 5), sharey=True)
+    fig, axes = plt.subplots(1, len(scenarios), figsize=(22, 8), sharey=True)
     
     for s_idx, scenario in enumerate(scenarios):
         ax = axes[s_idx]
@@ -205,21 +220,23 @@ def plot_coverage_distribution(summary_df, output_dir):
                     values.append(0)
             
             ax.bar(x, values, bottom=bottoms, color=colors[c_idx], 
-                   label=labels[c_idx] if s_idx == 0 else None, width=0.7)
+                   label=labels[c_idx] if s_idx == 0 else None, width=0.7, edgecolor='black', linewidth=0.8)
             bottoms += values
         
         ax.set_xticks(x)
         ax.set_xticklabels([MODEL_CONFIG[m]['name'] for m in models], 
-                          rotation=45, ha='right', fontsize=8)
-        ax.set_title(SCENARIO_CONFIG[scenario]['name'], fontsize=10)
+                          rotation=45, ha='right', fontsize=16, fontweight='bold')
+        ax.set_title(SCENARIO_CONFIG[scenario]['name'], fontsize=24, fontweight='bold')
         ax.set_ylim(0, 100)
+        ax.tick_params(axis='y', labelsize=16)
         
         if s_idx == 0:
-            ax.set_ylabel('Coverage (%)')
+            ax.set_ylabel('Coverage (%)', fontweight='bold', fontsize=20)
     
-    fig.legend(labels, loc='center right', bbox_to_anchor=(1.08, 0.5))
-    plt.suptitle('Coverage Quality Distribution by Model and Scenario', fontsize=12)
-    plt.tight_layout()
+    fig.legend(labels, loc='center right', bbox_to_anchor=(1.08, 0.5), 
+               fontsize=18, frameon=True, fancybox=True)
+    plt.suptitle('Coverage Quality Distribution by Model and Scenario', fontsize=28, fontweight='bold')
+    plt.tight_layout(rect=[0, 0, 0.91, 0.94])
     plt.savefig(output_dir / 'coverage_distribution.pdf')
     plt.savefig(output_dir / 'coverage_distribution.png')
     plt.close()
@@ -231,7 +248,7 @@ def plot_model_ranking(summary_df, output_dir):
     if summary_df is None:
         return
     
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(12, 7))
     
     scenarios = list(SCENARIO_CONFIG.keys())
     scenario_names = [SCENARIO_CONFIG[s]['name'] for s in scenarios]
@@ -253,19 +270,21 @@ def plot_model_ranking(summary_df, output_dir):
                 stds.append(0)
         
         offset = (m_idx - len(MODEL_CONFIG)/2 + 0.5) * width
-        bars = ax.bar(x + offset, means, width, yerr=stds, capsize=2,
-                     label=config['name'], color=config['color'], alpha=0.8)
+        bars = ax.bar(x + offset, means, width, yerr=stds, capsize=3,
+                     label=config['name'], color=config['color'], alpha=0.85,
+                     edgecolor='black', linewidth=0.5, error_kw={'linewidth': 1.5})
     
     ax.set_xticks(x)
-    ax.set_xticklabels(scenario_names, rotation=30, ha='right')
-    ax.set_ylabel('Mean Signal Strength (dBm)')
-    ax.set_title('Model Performance Comparison Across Scenarios')
-    ax.legend(loc='upper right')
-    ax.grid(True, axis='y', alpha=0.3)
+    ax.set_xticklabels(scenario_names, rotation=30, ha='right', fontweight='bold', fontsize=12)
+    ax.set_ylabel('Mean Signal Strength (dBm)', fontweight='bold', fontsize=14)
+    ax.set_title('Model Performance Comparison Across Scenarios', fontweight='bold', fontsize=16)
+    ax.legend(loc='upper right', fontsize=11, frameon=True, fancybox=True)
+    ax.grid(True, axis='y', alpha=0.3, linewidth=1)
+    ax.tick_params(axis='y', labelsize=11)
     
     # Add threshold reference
-    ax.axhline(y=-85, color='green', linestyle='--', alpha=0.5, label='Good threshold')
-    ax.axhline(y=-100, color='orange', linestyle='--', alpha=0.5, label='Fair threshold')
+    ax.axhline(y=-85, color='green', linestyle='--', alpha=0.6, linewidth=2, label='Good threshold')
+    ax.axhline(y=-100, color='orange', linestyle='--', alpha=0.6, linewidth=2, label='Fair threshold')
     
     plt.tight_layout()
     plt.savefig(output_dir / 'model_ranking.pdf')
