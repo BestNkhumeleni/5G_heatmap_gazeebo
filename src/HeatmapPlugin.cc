@@ -139,8 +139,11 @@ void HeatmapPlugin::Configure(
     if (sdf->HasElement("enable_click_query"))
         enableClickQuery = sdf->Get<bool>("enable_click_query");
 
-    // Parse gNB configurations
-    // Legacy single gNB support
+    // ========================================================================
+    // Parse gNB configurations - OPTION B: Indexed parameter naming
+    // ========================================================================
+    
+    // Method 1: Legacy single gNB support (gnb_pose)
     if (sdf->HasElement("gnb_pose"))
     {
         GnbConfig gnb;
@@ -152,50 +155,95 @@ void HeatmapPlugin::Configure(
         gnb.txGainDbi = propConfig.txAntennaGainDbi;
         gnb.frequencyHz = propConfig.frequencyHz;
         gnbConfigs.push_back(gnb);
+        
+        ignmsg << "Loaded legacy gNB from gnb_pose at (" 
+               << gnb.position.X() << ", " << gnb.position.Y() << ", " 
+               << gnb.position.Z() << ")" << std::endl;
     }
     
-    // Multi-gNB configuration
-    auto gnbElem = sdf->GetElement("gnb");
-    while (gnbElem)
+    // Method 2: Indexed gNB configuration (gnb_0_pose, gnb_1_pose, etc.)
+    // This approach uses standard SDF element names that don't require schema changes
+    int gnbCount = 0;
+    if (sdf->HasElement("gnb_count"))
     {
+        gnbCount = sdf->Get<int>("gnb_count");
+    }
+    else
+    {
+        // Auto-detect by checking for gnb_N_pose elements
+        for (int i = 0; i < 20; ++i)  // Support up to 20 gNBs
+        {
+            std::string poseName = "gnb_" + std::to_string(i) + "_pose";
+            if (sdf->HasElement(poseName))
+                gnbCount = i + 1;
+            else
+                break;
+        }
+    }
+    
+    for (int i = 0; i < gnbCount; ++i)
+    {
+        std::string prefix = "gnb_" + std::to_string(i) + "_";
+        std::string poseName = prefix + "pose";
+        
+        if (!sdf->HasElement(poseName))
+        {
+            ignwarn << "gNB " << i << " missing pose element (" << poseName 
+                    << "), skipping" << std::endl;
+            continue;
+        }
+        
         GnbConfig gnb;
         gnb.id = GetNextGnbId();
         
-        if (gnbElem->HasAttribute("name"))
-            gnb.name = gnbElem->Get<std::string>("name");
+        // Parse pose
+        auto pose = sdf->Get<math::Pose3d>(poseName);
+        gnb.position = pose.Pos();
+        
+        // Parse optional name
+        std::string nameElem = prefix + "name";
+        if (sdf->HasElement(nameElem))
+            gnb.name = sdf->Get<std::string>(nameElem);
         else
             gnb.name = "gNB_" + std::to_string(gnb.id);
         
-        if (gnbElem->HasElement("pose"))
-        {
-            auto pose = gnbElem->Get<math::Pose3d>("pose");
-            gnb.position = pose.Pos();
-        }
-        
-        // Per-gNB overrides
-        if (gnbElem->HasElement("tx_power"))
-            gnb.txPowerDbm = gnbElem->Get<double>("tx_power");
+        // Parse optional tx_power
+        std::string powerElem = prefix + "tx_power";
+        if (sdf->HasElement(powerElem))
+            gnb.txPowerDbm = sdf->Get<double>(powerElem);
         else
             gnb.txPowerDbm = propConfig.txPowerDbm;
-            
-        if (gnbElem->HasElement("tx_gain"))
-            gnb.txGainDbi = gnbElem->Get<double>("tx_gain");
+        
+        // Parse optional tx_gain
+        std::string gainElem = prefix + "tx_gain";
+        if (sdf->HasElement(gainElem))
+            gnb.txGainDbi = sdf->Get<double>(gainElem);
         else
             gnb.txGainDbi = propConfig.txAntennaGainDbi;
-            
-        if (gnbElem->HasElement("frequency"))
-            gnb.frequencyHz = gnbElem->Get<double>("frequency");
+        
+        // Parse optional frequency
+        std::string freqElem = prefix + "frequency";
+        if (sdf->HasElement(freqElem))
+            gnb.frequencyHz = sdf->Get<double>(freqElem);
         else
             gnb.frequencyHz = propConfig.frequencyHz;
         
-        if (gnbElem->HasElement("enabled"))
-            gnb.enabled = gnbElem->Get<bool>("enabled");
+        // Parse optional enabled flag
+        std::string enabledElem = prefix + "enabled";
+        if (sdf->HasElement(enabledElem))
+            gnb.enabled = sdf->Get<bool>(enabledElem);
+        else
+            gnb.enabled = true;
         
         gnbConfigs.push_back(gnb);
-        gnbElem = gnbElem->GetNextElement("gnb");
+        
+        ignmsg << "Loaded indexed gNB [" << gnb.id << "] '" << gnb.name 
+               << "' at (" << gnb.position.X() << ", " << gnb.position.Y() 
+               << ", " << gnb.position.Z() << ") power=" << gnb.txPowerDbm 
+               << " dBm" << std::endl;
     }
     
-    // If no gNBs configured, add a default one
+    // If no gNBs configured at all, add a default one
     if (gnbConfigs.empty())
     {
         GnbConfig defaultGnb;
@@ -206,6 +254,8 @@ void HeatmapPlugin::Configure(
         defaultGnb.txGainDbi = propConfig.txAntennaGainDbi;
         defaultGnb.frequencyHz = propConfig.frequencyHz;
         gnbConfigs.push_back(defaultGnb);
+        
+        ignmsg << "No gNBs configured, using default at origin" << std::endl;
     }
 
     // Initialize propagation model
@@ -324,19 +374,31 @@ void HeatmapPlugin::OnAddGnb(const msgs::Pose &_msg)
 void HeatmapPlugin::OnRemoveGnb(const msgs::Int32 &_msg)
 {
     int idToRemove = _msg.data();
+    bool found = false;
+    std::string name;
     
-    std::lock_guard<std::mutex> lock(gnbMutex);
-    
-    auto it = std::find_if(gnbConfigs.begin(), gnbConfigs.end(),
-        [idToRemove](const GnbConfig& g) { return g.id == idToRemove; });
-    
-    if (it != gnbConfigs.end())
+    // Scope the lock - must release BEFORE calling PublishGnbList
+    // to avoid deadlock (PublishGnbList also acquires gnbMutex)
     {
-        std::string name = it->name;
-        gnbConfigs.erase(it);
+        std::lock_guard<std::mutex> lock(gnbMutex);
+        
+        auto it = std::find_if(gnbConfigs.begin(), gnbConfigs.end(),
+            [idToRemove](const GnbConfig& g) { return g.id == idToRemove; });
+        
+        if (it != gnbConfigs.end())
+        {
+            name = it->name;
+            gnbConfigs.erase(it);
+            found = true;
+        }
+    }
+    // Lock is released here when the scope ends
+    
+    if (found)
+    {
         needsRecalculation = true;
         ignmsg << "Removed gNB [" << idToRemove << "] '" << name << "'" << std::endl;
-        PublishGnbList();
+        PublishGnbList();  // Now safe to call - lock is released
     }
     else
     {

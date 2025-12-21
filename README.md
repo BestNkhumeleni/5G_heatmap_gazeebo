@@ -181,3 +181,25 @@ comparison_results/
     ├── comparison_report.txt
     ├── summary_all_scenarios.csv
     └── latex_tables.tex
+```
+
+## Running multigNB test
+
+# Make scripts executable
+chmod +x run_multi_gnb_comparison.sh quick_multi_gnb_test.sh
+
+# Copy scenario file
+cp scenario_multi_gnb_experiment.sdf worlds/
+
+# Run full comparison (headless)
+./run_multi_gnb_comparison.sh all scenario_multi_gnb_experiment
+
+# Or run specific experiments
+./run_multi_gnb_comparison.sh interference scenario_open_field
+./run_multi_gnb_comparison.sh complementarity scenario_dense_urban
+
+# Analyze results
+python3 analyze_multi_gnb.py multi_gnb_results/<timestamp>
+
+# Interactive testing (with Gazebo running)
+./quick_multi_gnb_test.sh interactive

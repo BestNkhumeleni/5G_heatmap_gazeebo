@@ -1,0 +1,483 @@
+<?xml version="1.0" ?>
+<!-- 
+  Scenario: Multi-gNB Experiment Environment
+  Designed for systematic comparison of single vs multiple gNB deployments.
+  Features strategic building placement to create interesting:
+    - Cell boundary patterns
+    - Interference zones  
+    - Coverage complementarity opportunities
+    - Handover regions
+-->
+<sdf version="1.8">
+  <world name="scenario_multi_gnb_experiment">
+    
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="ignition-gazebo-physics-system"
+            name="ignition::gazebo::systems::Physics"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="ignition::gazebo::systems::SceneBroadcaster"/>
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="ignition::gazebo::systems::UserCommands"/>
+
+    <!-- 
+      Heatmap Plugin - Multi-gNB Configuration
+      Starts with single gNB; additional gNBs added via runtime commands
+    -->
+    <plugin filename="libHeatmapPlugin.so"
+            name="heatmap_plugin::HeatmapPlugin">
+      <!-- High resolution grid for detailed analysis -->
+      <grid_w>200</grid_w>
+      <grid_h>200</grid_h>
+      <cell_size>0.5</cell_size>
+      
+      <!-- 5G NR FR1 parameters -->
+      <frequency_hz>3500000000</frequency_hz>
+      <tx_dbm>30.0</tx_dbm>
+      <tx_height>12.0</tx_height>
+      <rx_height>1.5</rx_height>
+      <tx_gain_dbi>8.0</tx_gain_dbi>
+      <rx_gain_dbi>0.0</rx_gain_dbi>
+      
+      <!-- Start with single central gNB -->
+      <gnb_pose>0 0 12 0 0 0</gnb_pose>
+      
+      <propagation_model>3gpp_umi</propagation_model>
+      <wall_loss_db>15.0</wall_loss_db>
+      <reflection_coeff>0.7</reflection_coeff>
+      <combine_mode>best_server</combine_mode>
+      <include_shadowing>false</include_shadowing>
+      <max_reflections>2</max_reflections>
+    </plugin>
+
+    <!-- GUI Configuration -->
+    <gui fullscreen="0">
+      <plugin filename="GzScene3D" name="3D View">
+        <ignition-gui>
+          <title>3D View</title>
+          <property type="bool" key="showTitleBar">true</property>
+          <property type="string" key="state">docked</property>
+        </ignition-gui>
+        <engine>ogre2</engine>
+        <scene>scene</scene>
+        <ambient_light>0.4 0.4 0.4</ambient_light>
+        <background_color>0.8 0.8 0.8</background_color>
+        <camera_pose>70 -70 60 0 0.6 2.35</camera_pose>
+      </plugin>
+
+      <plugin filename="WorldControl" name="World control">
+        <ignition-gui>
+          <title>World control</title>
+          <property type="bool" key="showTitleBar">false</property>
+          <property type="string" key="state">floating</property>
+          <anchors target="3D View">
+            <line own="left" target="left"/>
+            <line own="bottom" target="bottom"/>
+          </anchors>
+        </ignition-gui>
+        <play_pause>true</play_pause>
+        <step>true</step>
+        <start_paused>false</start_paused>
+      </plugin>
+
+      <plugin filename="ImageDisplay" name="RF Heatmap">
+        <ignition-gui>
+          <title>Multi-gNB Signal Heatmap</title>
+          <property type="bool" key="showTitleBar">true</property>
+          <property type="string" key="state">docked</property>
+        </ignition-gui>
+        <topic>/gnb/heatmap</topic>
+      </plugin>
+
+      <plugin filename="TopicViewer" name="Status">
+        <ignition-gui>
+          <title>System Status</title>
+          <property type="bool" key="showTitleBar">true</property>
+          <property type="string" key="state">docked</property>
+        </ignition-gui>
+        <topic_name>/gnb/heatmap/status</topic_name>
+      </plugin>
+
+      <plugin filename="TopicViewer" name="Query Results">
+        <ignition-gui>
+          <title>Signal Query</title>
+          <property type="bool" key="showTitleBar">true</property>
+          <property type="string" key="state">docked</property>
+        </ignition-gui>
+        <topic_name>/gnb/heatmap/click_info</topic_name>
+      </plugin>
+
+      <plugin filename="EntityTree" name="Entity tree">
+        <ignition-gui>
+          <title>Entity tree</title>
+          <property type="bool" key="showTitleBar">true</property>
+          <property type="string" key="state">docked</property>
+        </ignition-gui>
+      </plugin>
+    </gui>
+
+    <!-- Lighting -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 50 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Ground Plane - Neutral grey -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>250 250</size></plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>250 250</size></plane>
+          </geometry>
+          <material>
+            <ambient>0.55 0.55 0.55 1</ambient>
+            <diffuse>0.55 0.55 0.55 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ================================================================== -->
+    <!-- QUADRANT MARKERS - Visual reference for cell boundary analysis    -->
+    <!-- ================================================================== -->
+    
+    <!-- Central tower marker (gNB site 0) -->
+    <model name="site_marker_central">
+      <static>true</static>
+      <pose>0 0 6 0 0 0</pose>
+      <link name="link">
+        <visual name="pole">
+          <geometry><cylinder><radius>0.2</radius><length>12</length></cylinder></geometry>
+          <material>
+            <ambient>0.4 0.4 0.4 1</ambient>
+            <diffuse>0.4 0.4 0.4 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+        <visual name="antenna">
+          <pose>0 0 6.5 0 0 0</pose>
+          <geometry><box><size>0.5 0.2 1.0</size></box></geometry>
+          <material>
+            <ambient>0.9 0.15 0.15 1</ambient>
+            <diffuse>0.9 0.15 0.15 1</diffuse>
+            <specular>0.2 0.2 0.2 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ================================================================== -->
+    <!-- STRATEGIC BUILDING PLACEMENT                                       -->
+    <!-- Creates interesting coverage patterns and shadow zones             -->
+    <!-- ================================================================== -->
+
+    <!-- Central cluster - creates coverage holes near center -->
+    <model name="central_bldg_1">
+      <static>true</static>
+      <pose>8 5 5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>6 6 10</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>6 6 10</size></box></geometry>
+          <material>
+            <ambient>0.3 0.5 0.7 1</ambient>
+            <diffuse>0.3 0.5 0.7 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="central_bldg_2">
+      <static>true</static>
+      <pose>-6 -8 6 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>8 6 12</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>8 6 12</size></box></geometry>
+          <material>
+            <ambient>0.7 0.5 0.3 1</ambient>
+            <diffuse>0.7 0.5 0.3 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- NE Quadrant buildings -->
+    <model name="bldg_ne_1">
+      <static>true</static>
+      <pose>25 20 7 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>10 8 14</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>10 8 14</size></box></geometry>
+          <material>
+            <ambient>0.4 0.7 0.5 1</ambient>
+            <diffuse>0.4 0.7 0.5 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="bldg_ne_2">
+      <static>true</static>
+      <pose>35 30 5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>8 10 10</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>8 10 10</size></box></geometry>
+          <material>
+            <ambient>0.5 0.75 0.55 1</ambient>
+            <diffuse>0.5 0.75 0.55 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- SE Quadrant - potential gNB site area -->
+    <model name="bldg_se_1">
+      <static>true</static>
+      <pose>28 -22 8 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>12 8 16</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>12 8 16</size></box></geometry>
+          <material>
+            <ambient>0.75 0.55 0.35 1</ambient>
+            <diffuse>0.75 0.55 0.35 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="bldg_se_2">
+      <static>true</static>
+      <pose>18 -35 6 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>10 12 12</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>10 12 12</size></box></geometry>
+          <material>
+            <ambient>0.8 0.6 0.4 1</ambient>
+            <diffuse>0.8 0.6 0.4 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- SW Quadrant -->
+    <model name="bldg_sw_1">
+      <static>true</static>
+      <pose>-25 -25 9 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>10 10 18</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>10 10 18</size></box></geometry>
+          <material>
+            <ambient>0.6 0.4 0.7 1</ambient>
+            <diffuse>0.6 0.4 0.7 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="bldg_sw_2">
+      <static>true</static>
+      <pose>-35 -18 5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>8 8 10</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>8 8 10</size></box></geometry>
+          <material>
+            <ambient>0.55 0.35 0.65 1</ambient>
+            <diffuse>0.55 0.35 0.65 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- NW Quadrant -->
+    <model name="bldg_nw_1">
+      <static>true</static>
+      <pose>-28 25 7 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>10 12 14</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>10 12 14</size></box></geometry>
+          <material>
+            <ambient>0.35 0.6 0.7 1</ambient>
+            <diffuse>0.35 0.6 0.7 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="bldg_nw_2">
+      <static>true</static>
+      <pose>-20 38 6 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>12 8 12</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>12 8 12</size></box></geometry>
+          <material>
+            <ambient>0.4 0.65 0.75 1</ambient>
+            <diffuse>0.4 0.65 0.75 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Long barrier building - creates interesting cell boundary effects -->
+    <model name="barrier_bldg">
+      <static>true</static>
+      <pose>0 35 5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>40 4 10</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>40 4 10</size></box></geometry>
+          <material>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Outer ring buildings - defines coverage boundary -->
+    <model name="outer_bldg_n">
+      <static>true</static>
+      <pose>5 50 6 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>14 8 12</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>14 8 12</size></box></geometry>
+          <material>
+            <ambient>0.6 0.65 0.55 1</ambient>
+            <diffuse>0.6 0.65 0.55 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="outer_bldg_e">
+      <static>true</static>
+      <pose>50 5 7 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>8 14 14</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>8 14 14</size></box></geometry>
+          <material>
+            <ambient>0.65 0.6 0.5 1</ambient>
+            <diffuse>0.65 0.6 0.5 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="outer_bldg_s">
+      <static>true</static>
+      <pose>-8 -48 5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>16 6 10</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>16 6 10</size></box></geometry>
+          <material>
+            <ambient>0.55 0.55 0.65 1</ambient>
+            <diffuse>0.55 0.55 0.65 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="outer_bldg_w">
+      <static>true</static>
+      <pose>-48 -5 6 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>6 16 12</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>6 16 12</size></box></geometry>
+          <material>
+            <ambient>0.5 0.6 0.6 1</ambient>
+            <diffuse>0.5 0.6 0.6 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>
