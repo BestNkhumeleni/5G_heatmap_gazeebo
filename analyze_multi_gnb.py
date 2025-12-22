@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Multi-gNB Deployment Analysis Script (FIXED)
-=====================================
-Generates publication-ready visualizations for the academic paper on
-single vs multiple gNB deployment analysis.
+Multi-gNB Deployment KPI Comparison Plots
+==========================================
+Generates publication-ready visualizations comparing deployment configurations
+across multiple Key Performance Indicators (KPIs).
 
 Usage:
-    python analyze_multi_gnb.py <results_directory>
-    python analyze_multi_gnb.py multi_gnb_results/20241215_120000
+    python generate_kpi_comparison_plots.py <results_directory>
+    python generate_kpi_comparison_plots.py multi_gnb_results/20241215_120000
 """
 
 import os
@@ -16,409 +16,541 @@ import glob
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
-from matplotlib.patches import Patch
+import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
-from scipy import interpolate
-from scipy.ndimage import gaussian_filter
+from scipy import stats
 import warnings
 warnings.filterwarnings('ignore')
 
-# Publication-ready font sizes
-FONT_SIZES = {
-    'title': 14,
-    'label': 12,
-    'tick': 10,
-    'legend': 10,
-    'annotation': 9
-}
+# =============================================================================
+# Configuration
+# =============================================================================
 
-# Color schemes
-GNB_COLORS = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', 
-              '#ffff33', '#a65628', '#f781bf']
-COVERAGE_CMAP = 'RdYlGn'
-SINR_CMAP = 'RdYlBu'
-SIGNAL_CMAP = 'jet'
-
+# Publication-ready settings
 plt.rcParams.update({
-    'font.size': FONT_SIZES['tick'],
-    'axes.titlesize': FONT_SIZES['title'],
-    'axes.labelsize': FONT_SIZES['label'],
-    'xtick.labelsize': FONT_SIZES['tick'],
-    'ytick.labelsize': FONT_SIZES['tick'],
-    'legend.fontsize': FONT_SIZES['legend'],
+    'font.family': 'serif',
+    'font.size': 10,
+    'axes.titlesize': 12,
+    'axes.labelsize': 11,
+    'xtick.labelsize': 9,
+    'ytick.labelsize': 10,
+    'legend.fontsize': 9,
     'figure.dpi': 150,
     'savefig.dpi': 300,
     'savefig.bbox': 'tight',
-    'savefig.pad_inches': 0.1
+    'savefig.pad_inches': 0.1,
+    'axes.grid': True,
+    'grid.alpha': 0.3,
+    'axes.axisbelow': True
 })
 
+# Deployment configurations (matching run_multi_gnb_comparison.sh)
+DEPLOYMENT_ORDER = [
+    'single_central',
+    'single_elevated', 
+    'dual_symmetric',
+    'dual_diagonal',
+    'dual_heterogeneous',
+    'tri_triangle',
+    'tri_linear',
+    'tri_heterogeneous',
+    'penta_cross',
+    'penta_pentagon'
+]
+
+DEPLOYMENT_LABELS = {
+    'single_central': 'Single\nCentral',
+    'single_elevated': 'Single\nElevated',
+    'dual_symmetric': 'Dual\nSymmetric',
+    'dual_diagonal': 'Dual\nDiagonal',
+    'dual_heterogeneous': 'Dual\nHetero',
+    'tri_triangle': 'Triangle',
+    'tri_linear': 'Linear\nArray',
+    'tri_heterogeneous': 'Tri-\nHetero',
+    'penta_cross': 'Cross\nPattern',
+    'penta_pentagon': 'Pentagon'
+}
+
+# Short labels for tight spaces
+DEPLOYMENT_LABELS_SHORT = {
+    'single_central': 'S-Cen',
+    'single_elevated': 'S-Elev',
+    'dual_symmetric': 'D-Sym',
+    'dual_diagonal': 'D-Diag',
+    'dual_heterogeneous': 'D-Het',
+    'tri_triangle': 'Tri',
+    'tri_linear': 'Lin',
+    'tri_heterogeneous': 'T-Het',
+    'penta_cross': 'Cross',
+    'penta_pentagon': 'Pent'
+}
+
+# Color palette for deployments (colorblind-friendly)
+DEPLOYMENT_COLORS = {
+    'single_central': '#1f77b4',
+    'single_elevated': '#17becf',
+    'dual_symmetric': '#2ca02c',
+    'dual_diagonal': '#98df8a',
+    'dual_heterogeneous': '#ff7f0e',
+    'tri_triangle': '#d62728',
+    'tri_linear': '#ff9896',
+    'tri_heterogeneous': '#9467bd',
+    'penta_cross': '#8c564b',
+    'penta_pentagon': '#e377c2'
+}
+
+# Category colors for grouped charts
+CATEGORY_COLORS = {
+    'single': '#3498db',
+    'dual': '#2ecc71', 
+    'triple': '#e74c3c',
+    'penta': '#9b59b6'
+}
+
+# Thresholds
+COVERAGE_THRESHOLD_DBM = -100  # Good coverage
+HOLE_THRESHOLD_DBM = -115      # No coverage
+SINR_GOOD_THRESHOLD_DB = 10    # Good SINR
+SINR_INTERFERENCE_THRESHOLD_DB = 0  # Interference-limited
+HANDOVER_MARGIN_DB = 6         # Handover region margin
+
+
+# =============================================================================
+# Data Loading Functions
+# =============================================================================
 
 def load_grid_data(filepath):
     """Load grid data from CSV file."""
-    return pd.read_csv(filepath)
+    try:
+        df = pd.read_csv(filepath)
+        return df
+    except Exception as e:
+        print(f"  Error loading {filepath}: {e}")
+        return None
 
 
-def load_all_results(results_dir):
-    """Load all result files from a directory."""
-    data = {}
+def find_deployment_files(results_dir, deployment_key, model='3gpp_umi', mode='best_server'):
+    """Find the data file for a specific deployment configuration."""
     raw_dir = os.path.join(results_dir, 'raw_data')
     
-    for csv_file in glob.glob(os.path.join(raw_dir, '*.csv')):
-        basename = os.path.basename(csv_file).replace('.csv', '')
-        if '_stats' not in basename:
-            df = pd.read_csv(csv_file)
-            # Debug: print data summary
-            print(f"  Loaded {basename}: {len(df)} rows")
-            if 'best_signal_dbm' in df.columns:
-                print(f"    Signal range: {df['best_signal_dbm'].min():.1f} to {df['best_signal_dbm'].max():.1f} dBm")
-            if 'best_gnb_id' in df.columns:
-                print(f"    Unique gNB IDs: {sorted(df['best_gnb_id'].unique())}")
-            data[basename] = df
+    # Try different naming patterns
+    patterns = [
+        f"*_{deployment_key}_{model}_{mode}.csv",
+        f"*{deployment_key}*{model}*{mode}*.csv",
+        f"{deployment_key}*.csv"
+    ]
+    
+    for pattern in patterns:
+        matches = glob.glob(os.path.join(raw_dir, pattern))
+        # Filter out stats files
+        matches = [m for m in matches if '_stats' not in m]
+        if matches:
+            return matches[0]
+    
+    return None
+
+
+def load_all_deployments(results_dir, model='3gpp_umi', mode='best_server'):
+    """Load data for all deployment configurations."""
+    data = {}
+    
+    for dep in DEPLOYMENT_ORDER:
+        filepath = find_deployment_files(results_dir, dep, model, mode)
+        if filepath:
+            df = load_grid_data(filepath)
+            if df is not None and len(df) > 0:
+                data[dep] = df
+                print(f"  Loaded {dep}: {len(df)} points")
+            else:
+                print(f"  Warning: Empty data for {dep}")
+        else:
+            print(f"  Warning: No file found for {dep}")
     
     return data
 
 
-def create_heatmap_grid(df, value_col, grid_size=None):
-    """Convert DataFrame to 2D grid for heatmap plotting."""
-    x_unique = np.sort(df['x'].unique())
-    y_unique = np.sort(df['y'].unique())
-    
-    grid = np.full((len(y_unique), len(x_unique)), np.nan)
-    
-    x_idx = {v: i for i, v in enumerate(x_unique)}
-    y_idx = {v: i for i, v in enumerate(y_unique)}
-    
-    for _, row in df.iterrows():
-        xi = x_idx.get(row['x'])
-        yi = y_idx.get(row['y'])
-        if xi is not None and yi is not None:
-            grid[yi, xi] = row[value_col]
-    
-    return grid, x_unique, y_unique
+def load_sinr_data(results_dir, model='3gpp_umi'):
+    """Load SINR-specific data for each deployment."""
+    return load_all_deployments(results_dir, model, 'sinr')
 
 
-def plot_signal_heatmap(df, title, output_path, value_col='best_signal_dbm',
-                        vmin=None, vmax=None, cmap=SIGNAL_CMAP, gnb_positions=None):
-    """Plot signal strength heatmap."""
-    fig, ax = plt.subplots(figsize=(8, 7))
-    
-    grid, x_vals, y_vals = create_heatmap_grid(df, value_col)
-    
-    # Check if we have valid data
-    valid_data = grid[~np.isnan(grid)]
-    if len(valid_data) == 0:
-        print(f"  WARNING: No valid data for {title}")
-        plt.close()
-        return
-    
-    # Auto-calculate vmin/vmax if not provided, based on actual data
-    if vmin is None:
-        vmin = max(valid_data.min(), -120)  # Floor at -120 dBm
-    if vmax is None:
-        vmax = min(valid_data.max(), -30)   # Ceiling at -30 dBm
-    
-    # Ensure we have a valid range
-    if vmax <= vmin:
-        vmax = vmin + 10  # Ensure at least 10 dB range
-    
-    print(f"    Data range: {valid_data.min():.1f} to {valid_data.max():.1f}, plotting with vmin={vmin:.1f}, vmax={vmax:.1f}")
-    
-    # Apply slight smoothing for visual appeal (only if enough data)
-    if grid.shape[0] > 3 and grid.shape[1] > 3:
-        # Fill NaN with nearest neighbor before smoothing
-        grid_filled = np.nan_to_num(grid, nan=vmin)
-        grid_smooth = gaussian_filter(grid_filled, sigma=0.5)
-    else:
-        grid_smooth = np.nan_to_num(grid, nan=vmin)
-    
-    extent = [x_vals.min(), x_vals.max(), y_vals.min(), y_vals.max()]
-    
-    im = ax.imshow(grid_smooth, extent=extent, origin='lower',
-                   cmap=cmap, vmin=vmin, vmax=vmax, aspect='equal')
-    
-    # Add gNB markers
-    if gnb_positions is not None:
-        for i, (gx, gy) in enumerate(gnb_positions):
-            ax.plot(gx, gy, 'k^', markersize=12, markeredgewidth=2,
-                   markerfacecolor=GNB_COLORS[i % len(GNB_COLORS)])
-            ax.annotate(f'gNB{i}', (gx, gy), xytext=(5, 5),
-                       textcoords='offset points', fontsize=FONT_SIZES['annotation'])
-    
-    cbar = plt.colorbar(im, ax=ax, label='Signal Strength (dBm)', shrink=0.8)
-    
-    ax.set_xlabel('X Position (m)')
-    ax.set_ylabel('Y Position (m)')
-    ax.set_title(title)
-    ax.grid(True, alpha=0.3, linestyle='--')
-    
-    plt.savefig(output_path)
-    plt.close()
-    print(f"  Saved: {output_path}")
+# =============================================================================
+# KPI Calculation Functions
+# =============================================================================
 
-
-def plot_sinr_heatmap(df, title, output_path, gnb_positions=None):
-    """Plot SINR heatmap with interference visualization."""
-    fig, ax = plt.subplots(figsize=(8, 7))
+def calculate_all_kpis(data_dict, sinr_data_dict=None):
+    """Calculate all KPIs for each deployment configuration."""
+    kpis = {dep: {} for dep in DEPLOYMENT_ORDER}
     
-    grid, x_vals, y_vals = create_heatmap_grid(df, 'sinr_db')
-    
-    # Check for valid data
-    valid_data = grid[~np.isnan(grid)]
-    if len(valid_data) == 0:
-        print(f"  WARNING: No valid SINR data for {title}")
-        plt.close()
-        return
-    
-    # Auto-calculate range based on data
-    data_min = valid_data.min()
-    data_max = valid_data.max()
-    vmin = max(data_min - 5, -20)
-    vmax = min(data_max + 5, 40)
-    
-    print(f"    SINR range: {data_min:.1f} to {data_max:.1f} dB")
-    
-    # Fill NaN and smooth
-    if grid.shape[0] > 3 and grid.shape[1] > 3:
-        grid_filled = np.nan_to_num(grid, nan=0)
-        grid_smooth = gaussian_filter(grid_filled, sigma=0.5)
-    else:
-        grid_smooth = np.nan_to_num(grid, nan=0)
-    
-    extent = [x_vals.min(), x_vals.max(), y_vals.min(), y_vals.max()]
-    
-    im = ax.imshow(grid_smooth, extent=extent, origin='lower',
-                   cmap=SINR_CMAP, vmin=vmin, vmax=vmax, aspect='equal')
-    
-    # Overlay contours for SINR thresholds (only if we have variation)
-    if data_max - data_min > 5:
-        X, Y = np.meshgrid(x_vals, y_vals)
-        levels = [l for l in [0, 5, 10, 20] if vmin < l < vmax]
-        if levels:
-            contours = ax.contour(X, Y, grid_smooth, levels=levels,
-                                  colors='black', linewidths=0.5, linestyles='--')
-            ax.clabel(contours, inline=True, fontsize=8, fmt='%d dB')
-    
-    if gnb_positions is not None:
-        for i, (gx, gy) in enumerate(gnb_positions):
-            ax.plot(gx, gy, 'k^', markersize=12, markeredgewidth=2,
-                   markerfacecolor=GNB_COLORS[i % len(GNB_COLORS)])
-    
-    cbar = plt.colorbar(im, ax=ax, label='SINR (dB)', shrink=0.8)
-    
-    ax.set_xlabel('X Position (m)')
-    ax.set_ylabel('Y Position (m)')
-    ax.set_title(title)
-    ax.grid(True, alpha=0.3, linestyle='--')
-    
-    plt.savefig(output_path)
-    plt.close()
-    print(f"  Saved: {output_path}")
-
-
-def plot_best_server_map(df, title, output_path, gnb_positions=None):
-    """Plot best server (cell) map showing dominant gNB at each point."""
-    fig, ax = plt.subplots(figsize=(8, 7))
-    
-    grid, x_vals, y_vals = create_heatmap_grid(df, 'best_gnb_id')
-    
-    # Get unique valid gNB IDs (exclude -1 which means no coverage)
-    unique_gnbs = sorted([x for x in df['best_gnb_id'].unique() if x >= 0])
-    
-    # Handle edge cases
-    if len(unique_gnbs) == 0:
-        print(f"  WARNING: No valid gNB IDs in data for {title}")
-        ax.text(0.5, 0.5, 'No Coverage Data', ha='center', va='center', 
-                transform=ax.transAxes, fontsize=14)
-        plt.savefig(output_path)
-        plt.close()
-        return
-    
-    if len(unique_gnbs) == 1:
-        # Single gNB case - use simple coloring
-        print(f"  Note: Single gNB ({unique_gnbs[0]}) - using uniform coloring")
-        colors = [GNB_COLORS[unique_gnbs[0] % len(GNB_COLORS)]]
-        cmap = mcolors.ListedColormap(colors)
-        
-        # Replace invalid values with the single gNB ID for visualization
-        grid_plot = np.where(np.isnan(grid), -1, grid)
-        grid_plot = np.where(grid_plot < 0, np.nan, grid_plot)
-        
-        extent = [x_vals.min(), x_vals.max(), y_vals.min(), y_vals.max()]
-        im = ax.imshow(grid_plot, extent=extent, origin='lower',
-                       cmap=cmap, vmin=unique_gnbs[0]-0.5, vmax=unique_gnbs[0]+0.5, 
-                       aspect='equal')
-        
-        # Legend for single gNB
-        legend_elements = [Patch(facecolor=colors[0], edgecolor='black',
-                                label=f'gNB {unique_gnbs[0]}')]
-        ax.legend(handles=legend_elements, loc='upper right')
-        
-    else:
-        # Multiple gNBs - use discrete colormap with boundaries
-        num_gnbs = max(unique_gnbs) + 1
-        colors = GNB_COLORS[:num_gnbs]
-        cmap = mcolors.ListedColormap(colors)
-        
-        # Create bounds that span all possible gNB IDs
-        bounds = np.arange(-0.5, num_gnbs + 0.5, 1)
-        norm = mcolors.BoundaryNorm(bounds, cmap.N)
-        
-        extent = [x_vals.min(), x_vals.max(), y_vals.min(), y_vals.max()]
-        
-        # Replace NaN with -1 for plotting (will be outside colormap range)
-        grid_plot = np.nan_to_num(grid, nan=-1)
-        
-        im = ax.imshow(grid_plot, extent=extent, origin='lower',
-                       cmap=cmap, norm=norm, aspect='equal')
-        
-        # Add cell boundaries
-        X, Y = np.meshgrid(x_vals, y_vals)
-        boundary_levels = [i + 0.5 for i in range(num_gnbs - 1)]
-        if boundary_levels:
-            ax.contour(X, Y, grid_plot, levels=boundary_levels,
-                       colors='black', linewidths=1.5)
-        
-        # Legend
-        legend_elements = [Patch(facecolor=colors[i], edgecolor='black',
-                                label=f'gNB {i}') for i in unique_gnbs]
-        ax.legend(handles=legend_elements, loc='upper right')
-    
-    if gnb_positions is not None:
-        for i, (gx, gy) in enumerate(gnb_positions):
-            ax.plot(gx, gy, 'k^', markersize=14, markeredgewidth=2,
-                   markerfacecolor='white')
-            ax.annotate(f'{i}', (gx, gy), ha='center', va='center',
-                       fontsize=FONT_SIZES['annotation'], fontweight='bold')
-    
-    ax.set_xlabel('X Position (m)')
-    ax.set_ylabel('Y Position (m)')
-    ax.set_title(title)
-    ax.grid(True, alpha=0.3, linestyle='--')
-    
-    plt.savefig(output_path)
-    plt.close()
-    print(f"  Saved: {output_path}")
-
-
-def plot_coverage_comparison(data_dict, output_path):
-    """Compare coverage statistics across deployments."""
-    fig, axes = plt.subplots(1, 3, figsize=(14, 5))
-    
-    deployments = []
-    coverage_data = {'excellent': [], 'good': [], 'fair': [], 'poor': [], 'none': []}
-    sinr_means = []
-    signal_means = []
-    
-    for name, df in sorted(data_dict.items()):
-        if 'best_server' in name and 'stats' not in name:
-            # Extract deployment name more robustly
-            parts = name.split('_')
-            dep_name = parts[1] if len(parts) > 1 else name
-            deployments.append(dep_name)
+    for dep in DEPLOYMENT_ORDER:
+        if dep not in data_dict:
+            continue
             
-            total = len(df)
-            if total == 0:
-                continue
-                
-            coverage_data['excellent'].append(len(df[df['best_signal_dbm'] >= -70]) / total * 100)
-            coverage_data['good'].append(len(df[(df['best_signal_dbm'] >= -85) & (df['best_signal_dbm'] < -70)]) / total * 100)
-            coverage_data['fair'].append(len(df[(df['best_signal_dbm'] >= -100) & (df['best_signal_dbm'] < -85)]) / total * 100)
-            coverage_data['poor'].append(len(df[(df['best_signal_dbm'] >= -115) & (df['best_signal_dbm'] < -100)]) / total * 100)
-            coverage_data['none'].append(len(df[df['best_signal_dbm'] < -115]) / total * 100)
-            
-            signal_means.append(df['best_signal_dbm'].mean())
-            if 'sinr_db' in df.columns:
-                sinr_means.append(df['sinr_db'].mean())
+        df = data_dict[dep]
+        total_points = len(df)
+        
+        if total_points == 0:
+            continue
+        
+        # Signal column name (handle different naming conventions)
+        signal_col = 'best_signal_dbm' if 'best_signal_dbm' in df.columns else 'best_signal'
+        sinr_col = 'sinr_db' if 'sinr_db' in df.columns else 'sinr'
+        gnb_col = 'best_gnb_id' if 'best_gnb_id' in df.columns else 'best_gnb'
+        
+        if signal_col not in df.columns:
+            print(f"  Warning: No signal column found for {dep}")
+            continue
+        
+        signals = df[signal_col].values
+        
+        # 1. Coverage Probability (% of area with signal >= threshold)
+        covered = np.sum(signals >= COVERAGE_THRESHOLD_DBM)
+        kpis[dep]['coverage_probability'] = (covered / total_points) * 100
+        
+        # 2. Coverage Hole Ratio (% of area with no coverage)
+        holes = np.sum(signals < HOLE_THRESHOLD_DBM)
+        kpis[dep]['coverage_hole_ratio'] = (holes / total_points) * 100
+        
+        # Get SINR data
+        if sinr_data_dict and dep in sinr_data_dict:
+            sinr_df = sinr_data_dict[dep]
+            if sinr_col in sinr_df.columns:
+                sinr_values = sinr_df[sinr_col].values
+            elif 'sinr_db' in df.columns:
+                sinr_values = df['sinr_db'].values
             else:
-                sinr_means.append(0)
+                sinr_values = df[sinr_col].values if sinr_col in df.columns else None
+        elif sinr_col in df.columns:
+            sinr_values = df[sinr_col].values
+        else:
+            sinr_values = None
+        
+        if sinr_values is not None and len(sinr_values) > 0:
+            # Filter out invalid values
+            valid_sinr = sinr_values[~np.isnan(sinr_values) & (sinr_values > -100)]
+            
+            if len(valid_sinr) > 0:
+                # 3. Mean SINR
+                kpis[dep]['mean_sinr'] = np.mean(valid_sinr)
+                
+                # 5. Interference-Limited Fraction (SINR < threshold)
+                interference_limited = np.sum(valid_sinr < SINR_INTERFERENCE_THRESHOLD_DB)
+                kpis[dep]['interference_limited_fraction'] = (interference_limited / len(valid_sinr)) * 100
+                
+                # 9. 5th-Percentile SINR (for box plots)
+                kpis[dep]['sinr_5th_percentile'] = np.percentile(valid_sinr, 5)
+                kpis[dep]['sinr_distribution'] = valid_sinr
+        
+        # Calculate handover metrics (for multi-gNB deployments)
+        if gnb_col in df.columns:
+            gnb_ids = df[gnb_col].values
+            unique_gnbs = np.unique(gnb_ids[gnb_ids >= 0])
+            
+            if len(unique_gnbs) > 1:
+                # Need per-gNB signal data to calculate handover regions
+                # For now, estimate based on signal variance in local areas
+                kpis[dep]['num_gnbs'] = len(unique_gnbs)
+                
+                # Estimate handover region as areas where multiple gNBs serve nearby
+                # This is simplified - in real data we'd have all gNB signals
+                kpis[dep]['handover_region_pct'] = estimate_handover_region(df, gnb_col)
+            else:
+                kpis[dep]['num_gnbs'] = 1
+                kpis[dep]['handover_region_pct'] = 0
+        
+    # Calculate derived KPIs
+    baseline = 'single_central'
+    if baseline in kpis and 'mean_sinr' in kpis.get(baseline, {}):
+        baseline_sinr = kpis[baseline].get('mean_sinr', 0)
+        baseline_coverage = kpis[baseline].get('coverage_probability', 0)
+        
+        for dep in DEPLOYMENT_ORDER:
+            if dep in kpis:
+                # 4. SINR Degradation (compared to single gNB baseline)
+                if 'mean_sinr' in kpis[dep]:
+                    kpis[dep]['sinr_degradation'] = baseline_sinr - kpis[dep]['mean_sinr']
+                
+                # 8. Coverage Gain (improvement over baseline)
+                if 'coverage_probability' in kpis[dep]:
+                    kpis[dep]['coverage_gain'] = kpis[dep]['coverage_probability'] - baseline_coverage
+                
+                # 7. Boundary SINR (mean SINR in handover regions)
+                # Simplified: use lower percentile SINR as proxy
+                if 'sinr_distribution' in kpis[dep]:
+                    kpis[dep]['boundary_sinr'] = np.percentile(kpis[dep]['sinr_distribution'], 25)
     
-    if not deployments:
-        print("  No deployment data found for coverage comparison")
+    return kpis
+
+
+def estimate_handover_region(df, gnb_col):
+    """Estimate handover region percentage based on gNB boundaries."""
+    # Group by spatial grid and find transition points
+    gnb_ids = df[gnb_col].values
+    x_vals = df['x'].values
+    y_vals = df['y'].values
+    
+    handover_count = 0
+    total_count = len(df)
+    
+    # Check each point's neighbors
+    for i in range(len(df)):
+        x, y = x_vals[i], y_vals[i]
+        gnb = gnb_ids[i]
+        
+        # Find nearby points
+        distances = np.sqrt((x_vals - x)**2 + (y_vals - y)**2)
+        nearby_mask = (distances > 0) & (distances < 10)  # Within 10m
+        
+        if np.any(nearby_mask):
+            nearby_gnbs = gnb_ids[nearby_mask]
+            # If any neighbor has different serving gNB, this is handover region
+            if np.any(nearby_gnbs != gnb):
+                handover_count += 1
+    
+    return (handover_count / total_count) * 100 if total_count > 0 else 0
+
+
+# =============================================================================
+# Plotting Functions
+# =============================================================================
+
+def plot_kpi_bars(kpis, kpi_name, ylabel, title, output_path, 
+                  threshold_line=None, threshold_label=None,
+                  invert=False, show_values=True):
+    """Create a bar chart for a single KPI across all deployments."""
+    fig, ax = plt.subplots(figsize=(12, 5))
+    
+    x_positions = np.arange(len(DEPLOYMENT_ORDER))
+    values = []
+    colors = []
+    
+    for dep in DEPLOYMENT_ORDER:
+        if dep in kpis and kpi_name in kpis[dep]:
+            values.append(kpis[dep][kpi_name])
+        else:
+            values.append(0)
+        colors.append(DEPLOYMENT_COLORS.get(dep, '#7f7f7f'))
+    
+    bars = ax.bar(x_positions, values, color=colors, edgecolor='black', linewidth=0.5)
+    
+    # Add threshold line if specified
+    if threshold_line is not None:
+        ax.axhline(y=threshold_line, color='red', linestyle='--', linewidth=1.5, 
+                   label=threshold_label if threshold_label else f'Threshold: {threshold_line}')
+        ax.legend(loc='upper right')
+    
+    # Add value labels on bars
+    if show_values:
+        for bar, val in zip(bars, values):
+            height = bar.get_height()
+            ax.annotate(f'{val:.1f}',
+                       xy=(bar.get_x() + bar.get_width() / 2, height),
+                       xytext=(0, 3),
+                       textcoords="offset points",
+                       ha='center', va='bottom', fontsize=8)
+    
+    ax.set_xlabel('Deployment Configuration')
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels([DEPLOYMENT_LABELS_SHORT.get(d, d) for d in DEPLOYMENT_ORDER], 
+                       rotation=45, ha='right')
+    
+    if invert:
+        ax.invert_yaxis()
+    
+    plt.tight_layout()
+    plt.savefig(output_path)
+    plt.close()
+    print(f"  Saved: {output_path}")
+
+
+def plot_all_kpis_grid(kpis, output_path):
+    """Create a grid of all 7 main KPIs in a single figure."""
+    fig, axes = plt.subplots(3, 3, figsize=(15, 12))
+    axes = axes.flatten()
+    
+    kpi_configs = [
+        ('coverage_probability', 'Coverage Probability (%)', 'Coverage Probability', None),
+        ('coverage_hole_ratio', 'Coverage Hole Ratio (%)', 'Coverage Hole Ratio', None),
+        ('mean_sinr', 'Mean SINR (dB)', 'Mean SINR', SINR_GOOD_THRESHOLD_DB),
+        ('sinr_degradation', 'SINR Degradation (dB)', 'SINR Degradation vs Single Central', 0),
+        ('interference_limited_fraction', 'Interference-Limited (%)', 'Interference-Limited Fraction', None),
+        ('handover_region_pct', 'Handover Region (%)', 'Handover Region Percentage', None),
+        ('boundary_sinr', 'Boundary SINR (dB)', 'Boundary SINR (25th percentile)', SINR_INTERFERENCE_THRESHOLD_DB),
+    ]
+    
+    x_positions = np.arange(len(DEPLOYMENT_ORDER))
+    
+    for idx, (kpi_name, ylabel, title, threshold) in enumerate(kpi_configs):
+        ax = axes[idx]
+        
+        values = []
+        colors = []
+        for dep in DEPLOYMENT_ORDER:
+            if dep in kpis and kpi_name in kpis[dep]:
+                values.append(kpis[dep][kpi_name])
+            else:
+                values.append(np.nan)
+            colors.append(DEPLOYMENT_COLORS.get(dep, '#7f7f7f'))
+        
+        bars = ax.bar(x_positions, values, color=colors, edgecolor='black', linewidth=0.5)
+        
+        if threshold is not None:
+            ax.axhline(y=threshold, color='red', linestyle='--', linewidth=1, alpha=0.7)
+        
+        ax.set_ylabel(ylabel, fontsize=9)
+        ax.set_title(title, fontsize=10, fontweight='bold')
+        ax.set_xticks(x_positions)
+        ax.set_xticklabels([DEPLOYMENT_LABELS_SHORT.get(d, d) for d in DEPLOYMENT_ORDER], 
+                          rotation=45, ha='right', fontsize=8)
+    
+    # Hide unused subplots
+    for idx in range(len(kpi_configs), len(axes)):
+        axes[idx].set_visible(False)
+    
+    # Add legend
+    legend_elements = [mpatches.Patch(facecolor=DEPLOYMENT_COLORS[dep], 
+                                       edgecolor='black', label=DEPLOYMENT_LABELS_SHORT[dep])
+                      for dep in DEPLOYMENT_ORDER]
+    fig.legend(handles=legend_elements, loc='lower right', ncol=5, fontsize=8,
+              bbox_to_anchor=(0.98, 0.02))
+    
+    plt.tight_layout(rect=[0, 0.08, 1, 1])
+    plt.savefig(output_path)
+    plt.close()
+    print(f"  Saved: {output_path}")
+
+
+def plot_coverage_gain_waterfall(kpis, output_path):
+    """Create a waterfall chart showing incremental coverage gains."""
+    fig, ax = plt.subplots(figsize=(14, 6))
+    
+    # Sort deployments by number of gNBs and coverage
+    deployment_info = []
+    for dep in DEPLOYMENT_ORDER:
+        if dep in kpis and 'coverage_probability' in kpis[dep]:
+            num_gnbs = kpis[dep].get('num_gnbs', 1)
+            coverage = kpis[dep]['coverage_probability']
+            gain = kpis[dep].get('coverage_gain', 0)
+            deployment_info.append((dep, num_gnbs, coverage, gain))
+    
+    # Sort by coverage
+    deployment_info.sort(key=lambda x: x[2])
+    
+    x_positions = np.arange(len(deployment_info))
+    
+    # Create waterfall effect
+    baseline_coverage = deployment_info[0][2] if deployment_info else 0
+    
+    # Plot bars
+    coverages = [d[2] for d in deployment_info]
+    gains = [d[3] for d in deployment_info]
+    labels = [DEPLOYMENT_LABELS_SHORT.get(d[0], d[0]) for d in deployment_info]
+    colors = [DEPLOYMENT_COLORS.get(d[0], '#7f7f7f') for d in deployment_info]
+    
+    bars = ax.bar(x_positions, coverages, color=colors, edgecolor='black', linewidth=0.5)
+    
+    # Add gain annotations
+    for i, (bar, gain, coverage) in enumerate(zip(bars, gains, coverages)):
+        # Coverage value
+        ax.annotate(f'{coverage:.1f}%',
+                   xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                   xytext=(0, 3), textcoords="offset points",
+                   ha='center', va='bottom', fontsize=9, fontweight='bold')
+        
+        # Gain indicator (if not baseline)
+        if i > 0 and gain != 0:
+            color = 'green' if gain > 0 else 'red'
+            sign = '+' if gain > 0 else ''
+            ax.annotate(f'{sign}{gain:.1f}%',
+                       xy=(bar.get_x() + bar.get_width() / 2, bar.get_height() / 2),
+                       ha='center', va='center', fontsize=8, color=color,
+                       bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
+    
+    ax.set_xlabel('Deployment Configuration (sorted by coverage)')
+    ax.set_ylabel('Coverage Probability (%)')
+    ax.set_title('Coverage Probability Comparison with Gains vs Baseline')
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(labels, rotation=45, ha='right')
+    ax.set_ylim(0, 105)
+    
+    # Add baseline reference line
+    ax.axhline(y=baseline_coverage, color='blue', linestyle=':', linewidth=1.5,
+               label=f'Single Central Baseline ({baseline_coverage:.1f}%)')
+    ax.legend(loc='lower right')
+    
+    plt.tight_layout()
+    plt.savefig(output_path)
+    plt.close()
+    print(f"  Saved: {output_path}")
+
+
+def plot_sinr_distribution_boxplots(kpis, output_path):
+    """Create box plots showing SINR distribution for each deployment."""
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    
+    # Prepare data for box plots
+    box_data = []
+    labels = []
+    colors = []
+    percentile_5th = []
+    
+    for dep in DEPLOYMENT_ORDER:
+        if dep in kpis and 'sinr_distribution' in kpis[dep]:
+            sinr_dist = kpis[dep]['sinr_distribution']
+            if len(sinr_dist) > 0:
+                box_data.append(sinr_dist)
+                labels.append(DEPLOYMENT_LABELS_SHORT.get(dep, dep))
+                colors.append(DEPLOYMENT_COLORS.get(dep, '#7f7f7f'))
+                percentile_5th.append(kpis[dep].get('sinr_5th_percentile', np.nan))
+    
+    if not box_data:
+        print("  No SINR distribution data available for box plots")
         plt.close()
         return
     
-    # Plot 1: Stacked bar chart of coverage
+    # Left plot: Box plots
     ax1 = axes[0]
-    x = np.arange(len(deployments))
-    width = 0.6
+    bp = ax1.boxplot(box_data, patch_artist=True, labels=labels)
     
-    bottom = np.zeros(len(deployments))
-    colors_coverage = ['#2ecc71', '#27ae60', '#f39c12', '#e74c3c', '#95a5a6']
-    labels_coverage = ['Excellent (≥-70)', 'Good (≥-85)', 'Fair (≥-100)', 'Poor (≥-115)', 'No Coverage']
+    for patch, color in zip(bp['boxes'], colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.7)
     
-    for i, (cat, color) in enumerate(zip(['excellent', 'good', 'fair', 'poor', 'none'], colors_coverage)):
-        ax1.bar(x, coverage_data[cat], width, bottom=bottom, label=labels_coverage[i], color=color)
-        bottom += np.array(coverage_data[cat])
+    ax1.axhline(y=SINR_GOOD_THRESHOLD_DB, color='green', linestyle='--', 
+                label=f'Good SINR ({SINR_GOOD_THRESHOLD_DB} dB)')
+    ax1.axhline(y=SINR_INTERFERENCE_THRESHOLD_DB, color='red', linestyle='--',
+                label=f'Interference Threshold ({SINR_INTERFERENCE_THRESHOLD_DB} dB)')
     
-    ax1.set_ylabel('Coverage Distribution (%)')
     ax1.set_xlabel('Deployment Configuration')
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(deployments, rotation=45, ha='right')
-    ax1.legend(loc='upper right', fontsize=8)
-    ax1.set_title('Coverage Quality Distribution')
-    
-    # Plot 2: Mean signal strength
-    ax2 = axes[1]
-    bars = ax2.bar(x, signal_means, width, color='steelblue', edgecolor='black')
-    ax2.axhline(y=-85, color='green', linestyle='--', label='Good threshold')
-    ax2.axhline(y=-100, color='orange', linestyle='--', label='Fair threshold')
-    ax2.set_ylabel('Mean Signal Strength (dBm)')
-    ax2.set_xlabel('Deployment Configuration')
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(deployments, rotation=45, ha='right')
-    ax2.legend(loc='lower right', fontsize=8)
-    ax2.set_title('Mean Signal Strength by Deployment')
-    
-    # Plot 3: Mean SINR
-    ax3 = axes[2]
-    bars = ax3.bar(x, sinr_means, width, color='coral', edgecolor='black')
-    ax3.axhline(y=10, color='green', linestyle='--', label='Good SINR')
-    ax3.axhline(y=0, color='red', linestyle='--', label='Interference zone')
-    ax3.set_ylabel('Mean SINR (dB)')
-    ax3.set_xlabel('Deployment Configuration')
-    ax3.set_xticks(x)
-    ax3.set_xticklabels(deployments, rotation=45, ha='right')
-    ax3.legend(loc='lower right', fontsize=8)
-    ax3.set_title('Mean SINR by Deployment')
-    
-    plt.tight_layout()
-    plt.savefig(output_path)
-    plt.close()
-    print(f"  Saved: {output_path}")
-
-
-def plot_interference_analysis(df, output_path):
-    """Plot interference analysis: SINR vs gNB separation."""
-    if df is None or df.empty:
-        print("  No interference data available")
-        return
-    
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    
-    # Plot 1: SINR vs Separation
-    ax1 = axes[0]
-    ax1.plot(df['separation_m'], df['mean_sinr_db'], 'o-', color='steelblue',
-            markersize=8, linewidth=2, label='Mean SINR')
-    ax1.plot(df['separation_m'], df['min_sinr_db'], 's--', color='coral',
-            markersize=6, linewidth=1.5, label='Minimum SINR')
-    ax1.axhline(y=0, color='red', linestyle=':', alpha=0.7, label='Interference threshold')
-    ax1.axhline(y=10, color='green', linestyle=':', alpha=0.7, label='Good SINR')
-    
-    ax1.set_xlabel('gNB Separation Distance (m)')
     ax1.set_ylabel('SINR (dB)')
-    ax1.set_title('SINR vs gNB Separation')
-    ax1.legend(loc='lower right')
-    ax1.grid(True, alpha=0.3)
+    ax1.set_title('SINR Distribution by Deployment')
+    ax1.tick_params(axis='x', rotation=45)
+    ax1.legend(loc='upper right', fontsize=8)
     
-    # Plot 2: Interference zone percentage
+    # Right plot: 5th percentile SINR comparison
     ax2 = axes[1]
-    ax2.bar(df['separation_m'], df['interference_zone_pct'], width=3,
-           color='indianred', edgecolor='black', alpha=0.8)
-    ax2.set_xlabel('gNB Separation Distance (m)')
-    ax2.set_ylabel('Interference Zone (%)')
-    ax2.set_title('Percentage of Area with SINR < 5 dB')
-    ax2.grid(True, alpha=0.3, axis='y')
+    x_pos = np.arange(len(labels))
+    bars = ax2.bar(x_pos, percentile_5th, color=colors, edgecolor='black', linewidth=0.5)
+    
+    # Add value labels
+    for bar, val in zip(bars, percentile_5th):
+        if not np.isnan(val):
+            ax2.annotate(f'{val:.1f}',
+                        xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                        xytext=(0, 3), textcoords="offset points",
+                        ha='center', va='bottom', fontsize=8)
+    
+    ax2.axhline(y=SINR_INTERFERENCE_THRESHOLD_DB, color='red', linestyle='--',
+                label=f'Interference Threshold ({SINR_INTERFERENCE_THRESHOLD_DB} dB)')
+    
+    ax2.set_xlabel('Deployment Configuration')
+    ax2.set_ylabel('5th Percentile SINR (dB)')
+    ax2.set_title('5th Percentile SINR (Cell-Edge Performance)')
+    ax2.set_xticks(x_pos)
+    ax2.set_xticklabels(labels, rotation=45, ha='right')
+    ax2.legend(loc='lower right', fontsize=8)
     
     plt.tight_layout()
     plt.savefig(output_path)
@@ -426,37 +558,42 @@ def plot_interference_analysis(df, output_path):
     print(f"  Saved: {output_path}")
 
 
-def plot_coverage_complementarity(df, output_path):
-    """Plot coverage complementarity analysis."""
-    if df is None or df.empty:
-        print("  No complementarity data available")
-        return
+def plot_coverage_vs_interference_tradeoff(kpis, output_path):
+    """Plot coverage probability vs interference-limited fraction trade-off."""
+    fig, ax = plt.subplots(figsize=(10, 8))
     
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    for dep in DEPLOYMENT_ORDER:
+        if dep not in kpis:
+            continue
+        
+        coverage = kpis[dep].get('coverage_probability', None)
+        interference = kpis[dep].get('interference_limited_fraction', None)
+        
+        if coverage is not None and interference is not None:
+            ax.scatter(interference, coverage, 
+                      c=[DEPLOYMENT_COLORS.get(dep, '#7f7f7f')],
+                      s=200, edgecolors='black', linewidth=1.5,
+                      label=DEPLOYMENT_LABELS_SHORT.get(dep, dep), zorder=5)
+            
+            # Add label
+            ax.annotate(DEPLOYMENT_LABELS_SHORT.get(dep, dep),
+                       xy=(interference, coverage),
+                       xytext=(5, 5), textcoords='offset points',
+                       fontsize=8, fontweight='bold')
     
-    # Plot 1: Coverage vs number of gNBs
-    ax1 = axes[0]
-    x = df['num_gnbs']
-    ax1.plot(x, df['coverage_total_pct'], 'o-', color='steelblue',
-            markersize=10, linewidth=2, label='Total Coverage')
-    ax1.bar(x, df['coverage_gain_pct'], width=0.3, color='lightgreen',
-           edgecolor='black', alpha=0.7, label='Incremental Gain')
+    ax.set_xlabel('Interference-Limited Fraction (%)')
+    ax.set_ylabel('Coverage Probability (%)')
+    ax.set_title('Coverage vs Interference Trade-off')
     
-    ax1.set_xlabel('Number of gNBs')
-    ax1.set_ylabel('Coverage (%)')
-    ax1.set_title('Coverage vs Number of gNBs')
-    ax1.legend(loc='lower right')
-    ax1.grid(True, alpha=0.3)
-    ax1.set_xticks(x)
+    # Add quadrant labels
+    ax.axhline(y=90, color='green', linestyle=':', alpha=0.5)
+    ax.axvline(x=10, color='red', linestyle=':', alpha=0.5)
     
-    # Plot 2: Overlap percentage
-    ax2 = axes[1]
-    ax2.bar(x, df['overlap_pct'], width=0.5, color='coral', edgecolor='black')
-    ax2.set_xlabel('Number of gNBs')
-    ax2.set_ylabel('Overlap Area (%)')
-    ax2.set_title('Multi-gNB Coverage Overlap')
-    ax2.grid(True, alpha=0.3, axis='y')
-    ax2.set_xticks(x)
+    ax.text(5, 95, 'Ideal\n(High Coverage,\nLow Interference)', 
+            ha='center', va='center', fontsize=9, color='green',
+            bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.5))
+    
+    ax.legend(loc='lower left', ncol=2, fontsize=8)
     
     plt.tight_layout()
     plt.savefig(output_path)
@@ -464,33 +601,45 @@ def plot_coverage_complementarity(df, output_path):
     print(f"  Saved: {output_path}")
 
 
-def plot_cell_boundary_analysis(df, output_path):
-    """Plot cell boundary / handover region analysis."""
-    if df is None or df.empty or len(df) == 0:
-        print("  No cell boundary data available")
-        return
+def plot_grouped_kpi_comparison(kpis, output_path):
+    """Create grouped bar chart comparing single/dual/triple/penta deployments."""
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    # Group deployments by category
+    categories = {
+        'Single': ['single_central', 'single_elevated'],
+        'Dual': ['dual_symmetric', 'dual_diagonal', 'dual_heterogeneous'],
+        'Triple': ['tri_triangle', 'tri_linear', 'tri_heterogeneous'],
+        'Penta': ['penta_cross', 'penta_pentagon']
+    }
     
-    # Plot 1: Scatter plot of boundary points
-    ax1 = axes[0]
-    scatter = ax1.scatter(df['x'], df['y'], c=df['margin_db'], cmap='RdYlGn',
-                          s=20, alpha=0.7, vmin=0, vmax=6)
-    plt.colorbar(scatter, ax=ax1, label='Handover Margin (dB)')
-    ax1.set_xlabel('X Position (m)')
-    ax1.set_ylabel('Y Position (m)')
-    ax1.set_title('Cell Boundary Regions (Handover Margin < 6 dB)')
-    ax1.grid(True, alpha=0.3)
+    kpi_list = [
+        ('coverage_probability', 'Coverage Probability (%)', axes[0, 0]),
+        ('mean_sinr', 'Mean SINR (dB)', axes[0, 1]),
+        ('interference_limited_fraction', 'Interference-Limited (%)', axes[1, 0]),
+        ('handover_region_pct', 'Handover Region (%)', axes[1, 1])
+    ]
     
-    # Plot 2: Histogram of handover margins
-    ax2 = axes[1]
-    ax2.hist(df['margin_db'], bins=20, color='steelblue', edgecolor='black', alpha=0.7)
-    ax2.axvline(x=3, color='red', linestyle='--', label='Critical margin (3 dB)')
-    ax2.set_xlabel('Handover Margin (dB)')
-    ax2.set_ylabel('Frequency')
-    ax2.set_title('Distribution of Handover Margins')
-    ax2.legend()
-    ax2.grid(True, alpha=0.3, axis='y')
+    for kpi_name, ylabel, ax in kpi_list:
+        x = 0
+        xticks = []
+        xticklabels = []
+        
+        for cat_name, deps in categories.items():
+            for dep in deps:
+                if dep in kpis and kpi_name in kpis[dep]:
+                    val = kpis[dep][kpi_name]
+                    ax.bar(x, val, color=DEPLOYMENT_COLORS.get(dep, '#7f7f7f'),
+                          edgecolor='black', linewidth=0.5)
+                    xticks.append(x)
+                    xticklabels.append(DEPLOYMENT_LABELS_SHORT.get(dep, dep))
+                    x += 1
+            x += 0.5  # Gap between categories
+        
+        ax.set_ylabel(ylabel)
+        ax.set_title(kpi_name.replace('_', ' ').title())
+        ax.set_xticks(xticks)
+        ax.set_xticklabels(xticklabels, rotation=45, ha='right', fontsize=8)
     
     plt.tight_layout()
     plt.savefig(output_path)
@@ -498,142 +647,208 @@ def plot_cell_boundary_analysis(df, output_path):
     print(f"  Saved: {output_path}")
 
 
-def generate_summary_statistics(data_dict, output_path):
-    """Generate summary statistics CSV for all deployments."""
-    summary_data = []
+def generate_kpi_summary_table(kpis, output_path):
+    """Generate a summary table of all KPIs as CSV."""
+    rows = []
     
-    for name, df in data_dict.items():
-        if 'stats' not in name and len(df) > 0:
-            stats = {
-                'deployment': name,
-                'num_points': len(df),
-                'mean_signal_dbm': df['best_signal_dbm'].mean() if 'best_signal_dbm' in df.columns else np.nan,
-                'std_signal_dbm': df['best_signal_dbm'].std() if 'best_signal_dbm' in df.columns else np.nan,
-                'min_signal_dbm': df['best_signal_dbm'].min() if 'best_signal_dbm' in df.columns else np.nan,
-                'max_signal_dbm': df['best_signal_dbm'].max() if 'best_signal_dbm' in df.columns else np.nan,
-            }
-            
-            if 'sinr_db' in df.columns:
-                stats['mean_sinr_db'] = df['sinr_db'].mean()
-                stats['std_sinr_db'] = df['sinr_db'].std()
-                stats['min_sinr_db'] = df['sinr_db'].min()
-            
-            if 'best_signal_dbm' in df.columns:
-                total = len(df)
-                stats['coverage_excellent_pct'] = len(df[df['best_signal_dbm'] >= -70]) / total * 100
-                stats['coverage_good_pct'] = len(df[(df['best_signal_dbm'] >= -85) & (df['best_signal_dbm'] < -70)]) / total * 100
-                stats['coverage_fair_pct'] = len(df[(df['best_signal_dbm'] >= -100) & (df['best_signal_dbm'] < -85)]) / total * 100
-                stats['coverage_total_pct'] = len(df[df['best_signal_dbm'] >= -100]) / total * 100
-            
-            summary_data.append(stats)
+    columns = [
+        'Deployment',
+        'Coverage Probability (%)',
+        'Coverage Hole Ratio (%)',
+        'Mean SINR (dB)',
+        'SINR Degradation (dB)',
+        'Interference-Limited (%)',
+        'Handover Region (%)',
+        'Boundary SINR (dB)',
+        'Coverage Gain (%)',
+        '5th Percentile SINR (dB)'
+    ]
     
-    if summary_data:
-        summary_df = pd.DataFrame(summary_data)
-        summary_df.to_csv(output_path, index=False)
-        print(f"  Saved: {output_path}")
-    else:
-        print("  No data to summarize")
+    for dep in DEPLOYMENT_ORDER:
+        if dep not in kpis:
+            continue
+        
+        k = kpis[dep]
+        row = {
+            'Deployment': DEPLOYMENT_LABELS_SHORT.get(dep, dep),
+            'Coverage Probability (%)': k.get('coverage_probability', np.nan),
+            'Coverage Hole Ratio (%)': k.get('coverage_hole_ratio', np.nan),
+            'Mean SINR (dB)': k.get('mean_sinr', np.nan),
+            'SINR Degradation (dB)': k.get('sinr_degradation', np.nan),
+            'Interference-Limited (%)': k.get('interference_limited_fraction', np.nan),
+            'Handover Region (%)': k.get('handover_region_pct', np.nan),
+            'Boundary SINR (dB)': k.get('boundary_sinr', np.nan),
+            'Coverage Gain (%)': k.get('coverage_gain', np.nan),
+            '5th Percentile SINR (dB)': k.get('sinr_5th_percentile', np.nan)
+        }
+        rows.append(row)
+    
+    df = pd.DataFrame(rows)
+    df.to_csv(output_path, index=False, float_format='%.2f')
+    print(f"  Saved: {output_path}")
+    
+    return df
 
 
-def diagnose_data(data_dict):
-    """Diagnose potential data issues."""
-    print("\n" + "="*60)
-    print("  DATA DIAGNOSTICS")
-    print("="*60 + "\n")
+def generate_latex_table(kpis, output_path):
+    """Generate LaTeX table for the paper."""
+    latex_content = r"""% Auto-generated KPI comparison table
+\begin{table*}[htbp]
+\centering
+\caption{Multi-gNB Deployment KPI Comparison}
+\label{tab:kpi_comparison}
+\begin{tabular}{l|cc|ccc|cc|cc}
+\toprule
+\textbf{Deployment} & \textbf{Cov.} & \textbf{Holes} & \textbf{Mean} & \textbf{SINR} & \textbf{Interf.} & \textbf{H/O} & \textbf{Bound.} & \textbf{Cov.} & \textbf{5th \%} \\
+ & \textbf{Prob.} & \textbf{Ratio} & \textbf{SINR} & \textbf{Degr.} & \textbf{Limit.} & \textbf{Region} & \textbf{SINR} & \textbf{Gain} & \textbf{SINR} \\
+ & (\%) & (\%) & (dB) & (dB) & (\%) & (\%) & (dB) & (\%) & (dB) \\
+\midrule
+"""
     
-    for name, df in data_dict.items():
-        print(f"File: {name}")
-        print(f"  Shape: {df.shape}")
-        print(f"  Columns: {list(df.columns)}")
+    for dep in DEPLOYMENT_ORDER:
+        if dep not in kpis:
+            continue
         
-        if 'best_signal_dbm' in df.columns:
-            sig = df['best_signal_dbm']
-            print(f"  Signal: min={sig.min():.1f}, max={sig.max():.1f}, mean={sig.mean():.1f}")
-            print(f"  Signal -150 count: {len(df[sig <= -149])} / {len(df)}")
+        k = kpis[dep]
+        name = DEPLOYMENT_LABELS_SHORT.get(dep, dep).replace('\n', ' ')
         
-        if 'best_gnb_id' in df.columns:
-            print(f"  gNB IDs: {sorted(df['best_gnb_id'].unique())}")
+        vals = [
+            k.get('coverage_probability', np.nan),
+            k.get('coverage_hole_ratio', np.nan),
+            k.get('mean_sinr', np.nan),
+            k.get('sinr_degradation', np.nan),
+            k.get('interference_limited_fraction', np.nan),
+            k.get('handover_region_pct', np.nan),
+            k.get('boundary_sinr', np.nan),
+            k.get('coverage_gain', np.nan),
+            k.get('sinr_5th_percentile', np.nan)
+        ]
         
-        if 'sinr_db' in df.columns:
-            sinr = df['sinr_db']
-            print(f"  SINR: min={sinr.min():.1f}, max={sinr.max():.1f}, mean={sinr.mean():.1f}")
+        val_strs = [f'{v:.1f}' if not np.isnan(v) else '--' for v in vals]
         
-        print()
+        latex_content += f"{name} & {' & '.join(val_strs)} \\\\\n"
+    
+    latex_content += r"""\bottomrule
+\end{tabular}
+\end{table*}
+"""
+    
+    with open(output_path, 'w') as f:
+        f.write(latex_content)
+    
+    print(f"  Saved: {output_path}")
 
+
+# =============================================================================
+# Main Function
+# =============================================================================
 
 def main(results_dir):
     """Main analysis function."""
     print(f"\n{'='*60}")
-    print("  Multi-gNB Deployment Analysis")
+    print("  Multi-gNB KPI Comparison Analysis")
     print(f"{'='*60}\n")
     print(f"Results directory: {results_dir}\n")
     
-    # Setup output directories
+    # Setup output directory
     figures_dir = os.path.join(results_dir, 'figures')
     os.makedirs(figures_dir, exist_ok=True)
     
-    # Load all data
-    print("Loading data...")
-    data = load_all_results(results_dir)
-    print(f"  Found {len(data)} data files\n")
+    # Load data
+    print("Loading deployment data...")
+    data = load_all_deployments(results_dir)
     
     if not data:
-        print("ERROR: No data files found!")
+        print("ERROR: No deployment data found!")
+        print("Looking for alternative data sources...")
+        
+        # Try loading any CSV files
+        raw_dir = os.path.join(results_dir, 'raw_data')
+        if os.path.exists(raw_dir):
+            all_csvs = glob.glob(os.path.join(raw_dir, '*.csv'))
+            print(f"Found {len(all_csvs)} CSV files in raw_data/")
+            for csv in all_csvs[:5]:
+                print(f"  - {os.path.basename(csv)}")
         return
     
-    # Run diagnostics
-    diagnose_data(data)
+    print(f"\nLoaded {len(data)} deployment configurations\n")
     
-    # Generate heatmaps for each deployment
-    print("Generating heatmaps...")
-    for name, df in data.items():
-        if len(df) == 0:
-            print(f"  Skipping {name} - empty dataframe")
-            continue
-            
-        if 'best_signal_dbm' in df.columns:
-            plot_signal_heatmap(df, f'Signal Strength: {name}',
-                              os.path.join(figures_dir, f'{name}_signal_heatmap.pdf'))
-        
-        if 'sinr_db' in df.columns and df['sinr_db'].notna().any():
-            plot_sinr_heatmap(df, f'SINR: {name}',
-                            os.path.join(figures_dir, f'{name}_sinr_heatmap.pdf'))
-        
-        if 'best_gnb_id' in df.columns:
-            plot_best_server_map(df, f'Best Server: {name}',
-                               os.path.join(figures_dir, f'{name}_best_server.pdf'))
+    # Load SINR-specific data if available
+    print("Loading SINR data...")
+    sinr_data = load_sinr_data(results_dir)
     
-    # Coverage comparison
-    print("\nGenerating comparison plots...")
-    plot_coverage_comparison(data, os.path.join(figures_dir, 'coverage_comparison.pdf'))
+    # Calculate all KPIs
+    print("\nCalculating KPIs...")
+    kpis = calculate_all_kpis(data, sinr_data)
     
-    # Load and plot interference analysis
-    interf_file = os.path.join(results_dir, 'raw_data', 'interference_vs_separation.csv')
-    if os.path.exists(interf_file):
-        interf_df = pd.read_csv(interf_file)
-        plot_interference_analysis(interf_df, os.path.join(figures_dir, 'interference_analysis.pdf'))
+    # Generate individual KPI plots
+    print("\nGenerating individual KPI plots...")
     
-    # Load and plot complementarity analysis
-    comp_file = os.path.join(results_dir, 'raw_data', 'coverage_complementarity.csv')
-    if os.path.exists(comp_file):
-        comp_df = pd.read_csv(comp_file)
-        plot_coverage_complementarity(comp_df, os.path.join(figures_dir, 'coverage_complementarity.pdf'))
+    plot_kpi_bars(kpis, 'coverage_probability', 'Coverage Probability (%)',
+                  'Coverage Probability by Deployment',
+                  os.path.join(figures_dir, 'kpi_coverage_probability.pdf'),
+                  threshold_line=90, threshold_label='Target: 90%')
     
-    # Generate summary statistics
-    print("\nGenerating summary statistics...")
-    generate_summary_statistics(data, os.path.join(results_dir, 'analysis', 'summary_statistics.csv'))
+    plot_kpi_bars(kpis, 'coverage_hole_ratio', 'Coverage Hole Ratio (%)',
+                  'Coverage Hole Ratio by Deployment',
+                  os.path.join(figures_dir, 'kpi_coverage_holes.pdf'),
+                  threshold_line=5, threshold_label='Target: <5%')
+    
+    plot_kpi_bars(kpis, 'mean_sinr', 'Mean SINR (dB)',
+                  'Mean SINR by Deployment',
+                  os.path.join(figures_dir, 'kpi_mean_sinr.pdf'),
+                  threshold_line=SINR_GOOD_THRESHOLD_DB, threshold_label='Good SINR')
+    
+    plot_kpi_bars(kpis, 'sinr_degradation', 'SINR Degradation (dB)',
+                  'SINR Degradation vs Single Central Baseline',
+                  os.path.join(figures_dir, 'kpi_sinr_degradation.pdf'),
+                  threshold_line=0)
+    
+    plot_kpi_bars(kpis, 'interference_limited_fraction', 'Interference-Limited Fraction (%)',
+                  'Interference-Limited Area Fraction',
+                  os.path.join(figures_dir, 'kpi_interference_limited.pdf'),
+                  threshold_line=10, threshold_label='Target: <10%')
+    
+    plot_kpi_bars(kpis, 'handover_region_pct', 'Handover Region (%)',
+                  'Handover Region Percentage',
+                  os.path.join(figures_dir, 'kpi_handover_region.pdf'))
+    
+    plot_kpi_bars(kpis, 'boundary_sinr', 'Boundary SINR (dB)',
+                  'Boundary SINR (25th Percentile)',
+                  os.path.join(figures_dir, 'kpi_boundary_sinr.pdf'),
+                  threshold_line=SINR_INTERFERENCE_THRESHOLD_DB)
+    
+    # Generate composite plots
+    print("\nGenerating composite plots...")
+    
+    plot_all_kpis_grid(kpis, os.path.join(figures_dir, 'kpi_all_grid.pdf'))
+    
+    plot_coverage_gain_waterfall(kpis, os.path.join(figures_dir, 'kpi_coverage_gain_waterfall.pdf'))
+    
+    plot_sinr_distribution_boxplots(kpis, os.path.join(figures_dir, 'kpi_sinr_distribution.pdf'))
+    
+    plot_coverage_vs_interference_tradeoff(kpis, os.path.join(figures_dir, 'kpi_coverage_vs_interference.pdf'))
+    
+    plot_grouped_kpi_comparison(kpis, os.path.join(figures_dir, 'kpi_grouped_comparison.pdf'))
+    
+    # Generate summary tables
+    print("\nGenerating summary tables...")
+    
+    generate_kpi_summary_table(kpis, os.path.join(results_dir, 'kpi_summary.csv'))
+    
+    generate_latex_table(kpis, os.path.join(results_dir, 'kpi_table.tex'))
     
     print(f"\n{'='*60}")
     print("  Analysis Complete!")
     print(f"{'='*60}")
     print(f"\nFigures saved to: {figures_dir}")
-    print(f"Analysis saved to: {os.path.join(results_dir, 'analysis')}\n")
+    print(f"Summary saved to: {results_dir}\n")
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print("Usage: python analyze_multi_gnb.py <results_directory>")
-        print("Example: python analyze_multi_gnb.py multi_gnb_results/20241215_120000")
+        print("Usage: python generate_kpi_comparison_plots.py <results_directory>")
+        print("Example: python generate_kpi_comparison_plots.py multi_gnb_results/20241215_120000")
         sys.exit(1)
     
     results_dir = sys.argv[1]
