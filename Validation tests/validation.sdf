@@ -1,0 +1,406 @@
+<?xml version="1.0" ?>
+<!-- Indoor L-Shaped Building Scenario
+     Based on floor plan measurements:
+     - Main area: ~24.75m x 8.3m with L-shaped cutout
+     - 3 pillars on south wall
+     - Ceiling height: 3m
+     - gNB at 1.5m height
+-->
+<sdf version="1.8">
+  <world name="scenario_indoor_lshaped">
+    
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="ignition-gazebo-physics-system"
+            name="ignition::gazebo::systems::Physics"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="ignition::gazebo::systems::SceneBroadcaster"/>
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="ignition::gazebo::systems::UserCommands"/>
+
+    <plugin filename="libHeatmapPlugin.so"
+            name="heatmap_plugin::HeatmapPlugin">
+      <grid_w>256</grid_w>
+      <grid_h>256</grid_h>
+      <cell_size>0.15</cell_size>
+      <frequency_hz>3500000000</frequency_hz>
+      <tx_dbm>20.0</tx_dbm>
+      <tx_height>1.5</tx_height>
+      <rx_height>1.0</rx_height>
+      <tx_gain_dbi>5.0</tx_gain_dbi>
+      <rx_gain_dbi>0.0</rx_gain_dbi>
+      
+      <!-- ============================================================ -->
+      <!-- GNB POSITION - MODIFY THESE VALUES TO CHANGE GNB LOCATION    -->
+      <!-- Current: Center of building at 1.5m height                   -->
+      <!-- Format: x y z roll pitch yaw                                 -->
+      <!-- Building spans: X: 0 to 24.75m, Y: 0 to 8.3m                 -->
+      <!-- ============================================================ -->
+      <gnb_pose>12.375 4.15 1.5 0 0 0</gnb_pose>
+      <!-- ============================================================ -->
+      
+      <propagation_model>3gpp_umi</propagation_model>
+      <wall_loss_db>12.0</wall_loss_db>
+      <reflection_coeff>0.7</reflection_coeff>
+      <include_shadowing>false</include_shadowing>
+      <max_reflections>3</max_reflections>
+      <max_diffractions>1</max_diffractions>
+    </plugin>
+
+    <!-- GUI Configuration -->
+    <gui fullscreen="0">
+      <plugin filename="GzScene3D" name="3D View">
+        <ignition-gui>
+          <title>3D View</title>
+          <property type="bool" key="showTitleBar">true</property>
+          <property type="string" key="state">docked</property>
+        </ignition-gui>
+        <engine>ogre2</engine>
+        <scene>scene</scene>
+        <ambient_light>0.6 0.6 0.6</ambient_light>
+        <background_color>0.8 0.8 0.8</background_color>
+        <camera_pose>12 -15 20 0 0.8 1.57</camera_pose>
+      </plugin>
+
+      <plugin filename="WorldControl" name="World control">
+        <ignition-gui>
+          <property type="bool" key="showTitleBar">false</property>
+          <property type="string" key="state">floating</property>
+          <anchors target="3D View">
+            <line own="left" target="left"/>
+            <line own="bottom" target="bottom"/>
+          </anchors>
+        </ignition-gui>
+        <play_pause>true</play_pause>
+        <step>true</step>
+        <start_paused>false</start_paused>
+      </plugin>
+
+      <plugin filename="ImageDisplay" name="RF Heatmap">
+        <ignition-gui>
+          <title>RF Signal Heatmap</title>
+          <property type="bool" key="showTitleBar">true</property>
+          <property type="string" key="state">docked</property>
+        </ignition-gui>
+        <topic>/gnb/heatmap</topic>
+      </plugin>
+
+      <plugin filename="EntityTree" name="Entity tree">
+        <ignition-gui>
+          <title>Entity tree</title>
+          <property type="bool" key="showTitleBar">true</property>
+          <property type="string" key="state">docked</property>
+        </ignition-gui>
+      </plugin>
+    </gui>
+
+    <!-- Lighting -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>12 4 10 0 0 0</pose>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.3 0.3 0.3 1</specular>
+      <direction>-0.3 0.2 -0.9</direction>
+    </light>
+
+    <light type="point" name="indoor_light_1">
+      <pose>8 4 2.8 0 0 0</pose>
+      <diffuse>0.8 0.8 0.7 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>15</range>
+        <constant>0.5</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+    </light>
+
+    <light type="point" name="indoor_light_2">
+      <pose>18 4 2.8 0 0 0</pose>
+      <diffuse>0.8 0.8 0.7 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>15</range>
+        <constant>0.5</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+    </light>
+
+    <!-- ================================================================ -->
+    <!-- FLOOR                                                            -->
+    <!-- ================================================================ -->
+    
+    <!-- Main floor area -->
+    <model name="floor_main">
+      <static>true</static>
+      <pose>12.375 4.15 -0.05 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>24.75 8.3 0.1</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>24.75 8.3 0.1</size></box></geometry>
+          <material>
+            <ambient>0.7 0.7 0.65 1</ambient>
+            <diffuse>0.7 0.7 0.65 1</diffuse>
+            <specular>0.2 0.2 0.2 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ================================================================ -->
+    <!-- WALLS - 0.2m thick, 3m tall                                     -->
+    <!-- Wall material: Light grey concrete                               -->
+    <!-- ================================================================ -->
+    
+    <!-- NORTH WALL (Top) - Full width minus L-cutout -->
+    <!-- Section 1: From L-cutout to right edge -->
+    <model name="wall_north_main">
+      <static>true</static>
+      <!-- Position: starts after L-cutout (3.7m from left), extends to right edge -->
+      <!-- Length: 24.75 - 3.7 = 21.05m -->
+      <pose>14.225 8.2 1.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>21.05 0.2 3.0</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>21.05 0.2 3.0</size></box></geometry>
+          <material>
+            <ambient>0.85 0.85 0.8 1</ambient>
+            <diffuse>0.85 0.85 0.8 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- SOUTH WALL (Bottom) - Full width with door openings for pillars -->
+    <model name="wall_south">
+      <static>true</static>
+      <pose>12.375 0.1 1.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>24.75 0.2 3.0</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>24.75 0.2 3.0</size></box></geometry>
+          <material>
+            <ambient>0.85 0.85 0.8 1</ambient>
+            <diffuse>0.85 0.85 0.8 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- WEST WALL (Left) - Lower section (below L-cutout) -->
+    <model name="wall_west_lower">
+      <static>true</static>
+      <!-- Height of lower section: 8.3 - 4.93 = 3.37m from bottom -->
+      <pose>0.1 1.685 1.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.2 3.37 3.0</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.2 3.37 3.0</size></box></geometry>
+          <material>
+            <ambient>0.85 0.85 0.8 1</ambient>
+            <diffuse>0.85 0.85 0.8 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- L-CUTOUT - Horizontal wall (inner top of L) -->
+    <model name="wall_l_horizontal">
+      <static>true</static>
+      <!-- At Y = 3.37m from bottom, spanning 3.7m -->
+      <pose>1.85 3.37 1.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>3.7 0.2 3.0</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>3.7 0.2 3.0</size></box></geometry>
+          <material>
+            <ambient>0.85 0.85 0.8 1</ambient>
+            <diffuse>0.85 0.85 0.8 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- L-CUTOUT - Vertical wall (inner right of L) -->
+    <model name="wall_l_vertical">
+      <static>true</static>
+      <!-- At X = 3.7m, from Y=3.37 to Y=8.3 -->
+      <!-- Height: 8.3 - 3.37 = 4.93m -->
+      <pose>3.7 5.835 1.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.2 4.93 3.0</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.2 4.93 3.0</size></box></geometry>
+          <material>
+            <ambient>0.85 0.85 0.8 1</ambient>
+            <diffuse>0.85 0.85 0.8 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- EAST WALL (Right) - Full height -->
+    <model name="wall_east">
+      <static>true</static>
+      <pose>24.65 4.15 1.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.2 8.3 3.0</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.2 8.3 3.0</size></box></geometry>
+          <material>
+            <ambient>0.85 0.85 0.8 1</ambient>
+            <diffuse>0.85 0.85 0.8 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ================================================================ -->
+    <!-- PILLARS - Along south wall                                       -->
+    <!-- Pillar 1 & 3: 1.7m wide x 0.7m deep                             -->
+    <!-- Pillar 2 (middle): 0.535m wide x 0.7m deep                      -->
+    <!-- ================================================================ -->
+    
+    <!-- PILLAR 1 (Left) - After 3.25m from left edge -->
+    <!-- Position: 3.25 + 1.7/2 = 4.1m from left -->
+    <model name="pillar_1">
+      <static>true</static>
+      <pose>4.1 0.35 1.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>1.7 0.7 3.0</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>1.7 0.7 3.0</size></box></geometry>
+          <material>
+            <ambient>0.6 0.6 0.55 1</ambient>
+            <diffuse>0.6 0.6 0.55 1</diffuse>
+            <specular>0.15 0.15 0.15 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- PILLAR 2 (Middle) - After pillar 1 + 7.01m gap -->
+    <!-- Position: 3.25 + 1.7 + 7.01 + 0.535/2 = 12.2275m from left -->
+    <model name="pillar_2_middle">
+      <static>true</static>
+      <pose>12.2275 0.35 1.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.535 0.7 3.0</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.535 0.7 3.0</size></box></geometry>
+          <material>
+            <ambient>0.6 0.6 0.55 1</ambient>
+            <diffuse>0.6 0.6 0.55 1</diffuse>
+            <specular>0.15 0.15 0.15 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- PILLAR 3 (Right) - After pillar 2 + 5.75m gap -->
+    <!-- Position: 12.2275 + 0.535/2 + 5.75 + 1.7/2 = 19.095m from left -->
+    <model name="pillar_3">
+      <static>true</static>
+      <pose>18.845 0.35 1.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>1.7 0.7 3.0</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>1.7 0.7 3.0</size></box></geometry>
+          <material>
+            <ambient>0.6 0.6 0.55 1</ambient>
+            <diffuse>0.6 0.6 0.55 1</diffuse>
+            <specular>0.15 0.15 0.15 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ================================================================ -->
+    <!-- CEILING - REMOVED FOR VISIBILITY                                 -->
+    <!-- Uncomment below if you want to add ceiling back                  -->
+    <!-- ================================================================ -->
+    <!--
+    <model name="ceiling">
+      <static>true</static>
+      <pose>12.375 4.15 3.05 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>24.75 8.3 0.1</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>24.75 8.3 0.1</size></box></geometry>
+          <material>
+            <ambient>0.9 0.9 0.85 1</ambient>
+            <diffuse>0.9 0.9 0.85 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+    -->
+
+    <!-- ================================================================ -->
+    <!-- GNB VISUAL MARKER                                                -->
+    <!-- This shows where the gNB antenna is located                      -->
+    <!-- ================================================================ -->
+    <model name="gnb_marker">
+      <static>true</static>
+      <!-- ============================================================ -->
+      <!-- GNB VISUAL POSITION - Keep in sync with gnb_pose above!      -->
+      <!-- ============================================================ -->
+      <pose>12.375 4.15 1.5 0 0 0</pose>
+      <link name="link">
+        <!-- Antenna unit -->
+        <visual name="antenna_box">
+          <pose>0 0 0 0 0 0</pose>
+          <geometry><box><size>0.2 0.1 0.3</size></box></geometry>
+          <material>
+            <ambient>0.9 0.2 0.2 1</ambient>
+            <diffuse>0.9 0.2 0.2 1</diffuse>
+            <specular>0.3 0.1 0.1 1</specular>
+          </material>
+        </visual>
+        <!-- Mounting bracket -->
+        <visual name="mount">
+          <pose>0 0.1 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.03</radius><length>0.2</length></cylinder></geometry>
+          <material>
+            <ambient>0.3 0.3 0.3 1</ambient>
+            <diffuse>0.3 0.3 0.3 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>
