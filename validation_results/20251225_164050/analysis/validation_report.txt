@@ -1,0 +1,314 @@
+================================================================================
+        RF PROPAGATION MODEL VALIDATION REPORT
+        Generated for Academic Publication
+================================================================================
+
+Report Generated: 2025-12-25 16:50:20.570398
+Output Directory: validation_results/20251225_164050/analysis
+
+--------------------------------------------------------------------------------
+VALIDATION PARAMETERS
+--------------------------------------------------------------------------------
+  Frequency: 3.5 GHz
+  TX Height: 10.0 m
+  RX Height: 1.5 m
+  TX Power: 30.0 dBm
+  TX Gain: 8.0 dBi
+  RX Gain: 0.0 dBi
+
+--------------------------------------------------------------------------------
+VALIDATION AGAINST THEORETICAL 3GPP MODELS
+--------------------------------------------------------------------------------
+
+Model: 3GPP UMa (TR 38.901) (LOS)
+  Samples: 17
+  MAE: 3.66 dB
+  RMSE: 4.20 dB
+  Mean Error: +0.00 dB
+  Std Error: 4.20 dB
+  Within ±3dB: 41.2%
+  Within ±6dB: 76.5%
+  Within ±10dB: 100.0%
+  Correlation: 0.903
+  >>> OVERALL ACCURACY: 79.6% <<<
+
+Model: 3GPP UMa (TR 38.901) (NLOS)
+  Samples: 12
+  MAE: 16.60 dB
+  RMSE: 17.44 dB
+  Mean Error: +16.60 dB
+  Std Error: 5.37 dB
+  Within ±3dB: 0.0%
+  Within ±6dB: 0.0%
+  Within ±10dB: 8.3%
+  Correlation: 0.874
+  >>> OVERALL ACCURACY: 21.3% <<<
+
+Model: 3GPP UMi (TR 38.901) (LOS)
+  Samples: 17
+  MAE: 3.61 dB
+  RMSE: 4.56 dB
+  Mean Error: -0.62 dB
+  Std Error: 4.52 dB
+  Within ±3dB: 41.2%
+  Within ±6dB: 82.4%
+  Within ±10dB: 100.0%
+  Correlation: 0.887
+  >>> OVERALL ACCURACY: 79.5% <<<
+
+Model: 3GPP UMi (TR 38.901) (NLOS)
+  Samples: 12
+  MAE: 21.99 dB
+  RMSE: 23.07 dB
+  Mean Error: +21.99 dB
+  Std Error: 6.98 dB
+  Within ±3dB: 0.0%
+  Within ±6dB: 0.0%
+  Within ±10dB: 0.0%
+  Correlation: 0.452
+  >>> OVERALL ACCURACY: 9.0% <<<
+
+Model: Free Space (FSPL) (LOS)
+  Samples: 17
+  MAE: 0.69 dB
+  RMSE: 1.59 dB
+  Mean Error: +0.69 dB
+  Std Error: 1.43 dB
+  Within ±3dB: 94.1%
+  Within ±6dB: 100.0%
+  Within ±10dB: 100.0%
+  Correlation: 0.994
+  >>> OVERALL ACCURACY: 95.7% <<<
+
+Model: Free Space (FSPL) (NLOS)
+  Samples: 12
+  MAE: 20.00 dB
+  RMSE: 20.00 dB
+  Mean Error: +20.00 dB
+  Std Error: 0.00 dB
+  Within ±3dB: 0.0%
+  Within ±6dB: 0.0%
+  Within ±10dB: 0.0%
+  Correlation: 1.000
+  >>> OVERALL ACCURACY: 20.0% <<<
+
+Model: Hybrid (3GPP + RT) (LOS)
+  Samples: 17
+  MAE: 2.62 dB
+  RMSE: 3.51 dB
+  Mean Error: +0.66 dB
+  Std Error: 3.44 dB
+  Within ±3dB: 64.7%
+  Within ±6dB: 88.2%
+  Within ±10dB: 100.0%
+  Correlation: 0.934
+  >>> OVERALL ACCURACY: 85.3% <<<
+
+Model: Hybrid (3GPP + RT) (NLOS)
+  Samples: 12
+  MAE: 11.19 dB
+  RMSE: 13.18 dB
+  Mean Error: -8.31 dB
+  Std Error: 10.23 dB
+  Within ±3dB: 8.3%
+  Within ±6dB: 41.7%
+  Within ±10dB: 41.7%
+  Correlation: -0.279
+  >>> OVERALL ACCURACY: 24.6% <<<
+
+Model: Ray Tracing (LOS)
+  Samples: 17
+  MAE: 4.40 dB
+  RMSE: 5.11 dB
+  Mean Error: -3.65 dB
+  Std Error: 3.58 dB
+  Within ±3dB: 35.3%
+  Within ±6dB: 52.9%
+  Within ±10dB: 100.0%
+  Correlation: 0.965
+  >>> OVERALL ACCURACY: 75.2% <<<
+
+Model: Ray Tracing (NLOS)
+  Samples: 12
+  MAE: 11.19 dB
+  RMSE: 13.18 dB
+  Mean Error: -8.31 dB
+  Std Error: 10.23 dB
+  Within ±3dB: 8.3%
+  Within ±6dB: 41.7%
+  Within ±10dB: 41.7%
+  Correlation: -0.279
+  >>> OVERALL ACCURACY: 24.6% <<<
+
+--------------------------------------------------------------------------------
+VALIDATION AGAINST PUBLISHED MEASUREMENTS
+--------------------------------------------------------------------------------
+
+Model: 3GPP UMa (TR 38.901)
+  Literature: 3GPP TR 38.901 V16.1.0
+  MAE: 4.11 dB
+  RMSE: 4.29 dB
+  Within ±6dB: 87.5%
+  >>> ACCURACY: 80.0% <<<
+
+Model: 3GPP UMa (TR 38.901)
+  Literature: 3GPP TR 38.901 V16.1.0
+  MAE: 19.07 dB
+  RMSE: 20.83 dB
+  Within ±6dB: 0.0%
+  >>> ACCURACY: 17.8% <<<
+
+Model: 3GPP UMa (TR 38.901)
+  Literature: NYU Wireless (Sun et al. 2016, scaled)
+  MAE: 4.01 dB
+  RMSE: 4.13 dB
+  Within ±6dB: 100.0%
+  >>> ACCURACY: 82.4% <<<
+
+Model: 3GPP UMa (TR 38.901)
+  Literature: WINNER II D1.1.2
+  MAE: 4.63 dB
+  RMSE: 4.89 dB
+  Within ±6dB: 60.0%
+  >>> ACCURACY: 75.5% <<<
+
+Model: 3GPP UMi (TR 38.901)
+  Literature: 3GPP TR 38.901 V16.1.0
+  MAE: 3.08 dB
+  RMSE: 3.45 dB
+  Within ±6dB: 100.0%
+  >>> ACCURACY: 85.5% <<<
+
+Model: 3GPP UMi (TR 38.901)
+  Literature: 3GPP TR 38.901 V16.1.0
+  MAE: 18.33 dB
+  RMSE: 19.34 dB
+  Within ±6dB: 0.0%
+  >>> ACCURACY: 19.6% <<<
+
+Model: 3GPP UMi (TR 38.901)
+  Literature: NYU Wireless (Sun et al. 2016, scaled)
+  MAE: 2.99 dB
+  RMSE: 3.07 dB
+  Within ±6dB: 100.0%
+  >>> ACCURACY: 86.2% <<<
+
+Model: 3GPP UMi (TR 38.901)
+  Literature: WINNER II D1.1.2
+  MAE: 4.74 dB
+  RMSE: 5.27 dB
+  Within ±6dB: 80.0%
+  >>> ACCURACY: 76.4% <<<
+
+Model: Free Space (FSPL)
+  Literature: 3GPP TR 38.901 V16.1.0
+  MAE: 2.12 dB
+  RMSE: 2.52 dB
+  Within ±6dB: 100.0%
+  >>> ACCURACY: 90.6% <<<
+
+Model: Free Space (FSPL)
+  Literature: 3GPP TR 38.901 V16.1.0
+  MAE: 19.31 dB
+  RMSE: 20.55 dB
+  Within ±6dB: 0.0%
+  >>> ACCURACY: 20.0% <<<
+
+Model: Free Space (FSPL)
+  Literature: NYU Wireless (Sun et al. 2016, scaled)
+  MAE: 1.98 dB
+  RMSE: 2.33 dB
+  Within ±6dB: 100.0%
+  >>> ACCURACY: 91.2% <<<
+
+Model: Free Space (FSPL)
+  Literature: WINNER II D1.1.2
+  MAE: 2.60 dB
+  RMSE: 3.00 dB
+  Within ±6dB: 100.0%
+  >>> ACCURACY: 88.6% <<<
+
+Model: Hybrid (3GPP + RT)
+  Literature: 3GPP TR 38.901 V16.1.0
+  MAE: 4.25 dB
+  RMSE: 4.89 dB
+  Within ±6dB: 75.0%
+  >>> ACCURACY: 76.7% <<<
+
+Model: Hybrid (3GPP + RT)
+  Literature: 3GPP TR 38.901 V16.1.0
+  MAE: 18.18 dB
+  RMSE: 20.45 dB
+  Within ±6dB: 0.0%
+  >>> ACCURACY: 16.4% <<<
+
+Model: Hybrid (3GPP + RT)
+  Literature: NYU Wireless (Sun et al. 2016, scaled)
+  MAE: 2.11 dB
+  RMSE: 2.26 dB
+  Within ±6dB: 100.0%
+  >>> ACCURACY: 90.9% <<<
+
+Model: Hybrid (3GPP + RT)
+  Literature: WINNER II D1.1.2
+  MAE: 3.75 dB
+  RMSE: 4.27 dB
+  Within ±6dB: 100.0%
+  >>> ACCURACY: 82.8% <<<
+
+Model: Ray Tracing
+  Literature: 3GPP TR 38.901 V16.1.0
+  MAE: 4.74 dB
+  RMSE: 5.26 dB
+  Within ±6dB: 75.0%
+  >>> ACCURACY: 76.4% <<<
+
+Model: Ray Tracing
+  Literature: 3GPP TR 38.901 V16.1.0
+  MAE: 22.62 dB
+  RMSE: 24.12 dB
+  Within ±6dB: 0.0%
+  >>> ACCURACY: 19.1% <<<
+
+Model: Ray Tracing
+  Literature: NYU Wireless (Sun et al. 2016, scaled)
+  MAE: 4.39 dB
+  RMSE: 5.24 dB
+  Within ±6dB: 50.0%
+  >>> ACCURACY: 74.6% <<<
+
+Model: Ray Tracing
+  Literature: WINNER II D1.1.2
+  MAE: 5.61 dB
+  RMSE: 6.06 dB
+  Within ±6dB: 60.0%
+  >>> ACCURACY: 71.5% <<<
+
+--------------------------------------------------------------------------------
+OVERALL SUMMARY
+--------------------------------------------------------------------------------
+
+Best Performing: free_space_los (95.7%)
+Worst Performing: 3gpp_umi_nlos (9.0%)
+Average Accuracy: 51.5%
+
+--------------------------------------------------------------------------------
+INTERPRETATION GUIDE
+--------------------------------------------------------------------------------
+
+Accuracy Scoring:
+  90-100%: Excellent - Model closely matches theory/measurements
+  80-90%:  Very Good - Suitable for network planning
+  70-80%:  Good - Acceptable for preliminary analysis
+  60-70%:  Fair - Use with caution, consider calibration
+  <60%:    Poor - Significant discrepancies, review implementation
+
+Typical Expectations (per 3GPP TR 38.901):
+  - LOS conditions: Standard deviation 3-4 dB
+  - NLOS conditions: Standard deviation 6-8 dB
+  - Predictions within ±6 dB considered acceptable
+
+References:
+  - 3GPP TR 38.901 V16.1.0 (2020-01)
+  - WINNER II Channel Models D1.1.2
+  - COST 231 Urban Propagation Models
