@@ -134,7 +134,7 @@ double FreeSpaceModel::CalculateReceivedPower(
     double distance = txPos.Distance(rxPos);
     double pathLoss = FSPL_dB(distance, config.frequencyHz);
     
-    // Add wall penetration loss
+    // FSPL doesn't have NLOS variant, so we add wall penetration loss
     int walls = CountWallPenetrations(txPos, rxPos, obstacles);
     pathLoss += walls * config.defaultMaterial.penetrationLoss_dB;
     
@@ -204,12 +204,19 @@ double ThreeGPPUMiModel::CalculateNlosPathLoss(
 {
     double fc_GHz = frequencyHz / 1e9;
     
-    // NLOS path loss for UMi Street Canyon
-    double PL_NLOS = 35.3 * std::log10(distance3D_m) + 22.4 
+    // =========================================================================
+    // 3GPP TR 38.901 UMi Street Canyon NLOS Path Loss (Table 7.4.1-1)
+    // =========================================================================
+    // PL_UMi-NLOS = 35.3*log10(d3D) + 22.4 + 21.3*log10(fc) - 0.3*(hUT - 1.5)
+    // Valid range: 10m <= d2D <= 5000m
+    // =========================================================================
+    
+    double PL_NLOS = 35.3 * std::log10(distance3D_m) 
+                    + 22.4
                     + 21.3 * std::log10(fc_GHz)
                     - 0.3 * (hUT_m - 1.5);
     
-    // LOS path loss (for max comparison)
+    // LOS path loss (for max comparison per 3GPP spec)
     double PL_LOS = CalculateLosPathLoss(distance3D_m, distance2D_m, 
                                          frequencyHz, hBS_m, hUT_m);
     
@@ -264,17 +271,18 @@ double ThreeGPPUMiModel::CalculateReceivedPower(
     }
     else
     {
+        // =====================================================================
+        // IMPORTANT: 3GPP NLOS path loss is a STATISTICAL model that already
+        // accounts for obstruction effects. Do NOT add additional wall
+        // penetration loss - that would double-count the obstruction.
+        // =====================================================================
         pathLoss = CalculateNlosPathLoss(distance3D, distance2D,
                                          config.frequencyHz,
                                          config.txHeightM, config.rxHeightM);
         shadowingStd = config.shadowingStdNlos_dB;
         
-        // Additional penetration loss for walls
-        int walls = CountWallPenetrations(txPos, rxPos, obstacles);
-        if (walls > 0)
-        {
-            pathLoss += walls * config.defaultMaterial.penetrationLoss_dB;
-        }
+        // NO additional wall penetration loss for 3GPP models!
+        // The NLOS formula already accounts for obstruction statistically.
     }
     
     // Add shadowing (log-normal)
@@ -333,7 +341,15 @@ double ThreeGPPUMaModel::CalculateNlosPathLoss(
 {
     double fc_GHz = frequencyHz / 1e9;
     
-    double PL_NLOS = 13.54 + 39.08 * std::log10(distance3D_m)
+    // =========================================================================
+    // 3GPP TR 38.901 UMa NLOS Path Loss (Table 7.4.1-1)
+    // =========================================================================
+    // PL_UMa-NLOS = 13.54 + 39.08*log10(d3D) + 20*log10(fc) - 0.6*(hUT - 1.5)
+    // Valid range: 10m <= d2D <= 5000m
+    // =========================================================================
+    
+    double PL_NLOS = 13.54 
+                    + 39.08 * std::log10(distance3D_m)
                     + 20.0 * std::log10(fc_GHz)
                     - 0.6 * (hUT_m - 1.5);
     
@@ -395,13 +411,18 @@ double ThreeGPPUMaModel::CalculateReceivedPower(
     }
     else
     {
+        // =====================================================================
+        // IMPORTANT: 3GPP NLOS path loss is a STATISTICAL model that already
+        // accounts for obstruction effects. Do NOT add additional wall
+        // penetration loss - that would double-count the obstruction.
+        // =====================================================================
         pathLoss = CalculateNlosPathLoss(distance3D, distance2D,
                                          config.frequencyHz,
                                          config.txHeightM, config.rxHeightM);
         shadowingStd = 6.0;  // UMa NLOS
         
-        int walls = CountWallPenetrations(txPos, rxPos, obstacles);
-        pathLoss += walls * config.defaultMaterial.penetrationLoss_dB;
+        // NO additional wall penetration loss for 3GPP models!
+        // The NLOS formula already accounts for obstruction statistically.
     }
     
     double shadowing = 0.0;
@@ -535,7 +556,7 @@ std::vector<RayPath> RayTracingModel::FindPaths(
         
         if (hit.hit && hit.distance < directDist - 0.1)
         {
-            // Add penetration loss
+            // Ray tracing uses explicit wall penetration loss
             int walls = IPropagationModel::CountWallPenetrations(txPos, rxPos, obstacles);
             direct.pathLoss_dB += walls * config.defaultMaterial.penetrationLoss_dB;
         }
